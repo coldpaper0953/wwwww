@@ -1401,17 +1401,17 @@ public class PetService extends Service implements Flyer.Host {
         }
     }
 
-    /** 屏幕右缘小拉手：点开=悬浮聊天框；聊天框可输可发，还显示当前前台 App 名 */
+    /** 屏幕右缘小拉手：白色圆角窄条，点开=聊天小窗 */
     private void createTabHandle() {
         tabHandle = new TextView(this);
-        tabHandle.setText(Ico.s(this, "💬"));
-        tabHandle.setTextSize(18);
+        tabHandle.setText(Ico.s(this, "💬", 0xFF1B2A4A));   // 白底配深色图标
+        tabHandle.setTextSize(12);
         tabHandle.setTextColor(Color.WHITE);
         tabHandle.setGravity(Gravity.CENTER);
-        tabHandle.setPadding(0, dp(10), 0, dp(10));
+        tabHandle.setPadding(0, dp(5), 0, dp(5));          // 上下 padding 减半 → 整体宽度窄一半
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.parseColor("#CC1B2A4A"));
-        g.setCornerRadii(new float[]{dp(14), 0, 0, dp(14), dp(14), 0, 0, dp(14)});   // 左圆右直，贴边
+        g.setColor(Color.WHITE);
+        g.setCornerRadii(new float[]{dp(10), 0, 0, dp(10), dp(10), 0, 0, dp(10)});   // 左圆右直，贴边
         tabHandle.setBackground(g);
         tabLP = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
