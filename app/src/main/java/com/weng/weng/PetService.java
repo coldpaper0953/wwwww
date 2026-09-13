@@ -1511,7 +1511,7 @@ public class PetService extends Service implements Flyer.Host {
         String[] p = timePeriod();
         String app = currentAppLabel();
         String appTxt = (app == null)
-                ? "（App 感知未生效：去设置页开"App感知"并授"使用情况访问权限"）"
+                ? "（App 感知未生效：去设置页开『App感知』并授『使用情况访问权限』）"
                 : "当前应用：" + app;
         chatStatus.setText("🕐 " + p[0] + "　·　" + appTxt);
     }
