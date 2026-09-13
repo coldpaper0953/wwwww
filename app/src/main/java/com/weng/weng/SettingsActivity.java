@@ -24,6 +24,8 @@ public class SettingsActivity extends Activity {
     private android.app.AlertDialog pickDlg;
     private EditText apiBaseField, apiKeyField, apiModelField;
     private TextView emoLine, feedLine;
+    private TextView prankScore, prankBtn;
+    private EditText prankCount;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -240,6 +242,44 @@ public class SettingsActivity extends Activity {
         root.addView(apiCard);
         root.addView(gap(10));
 
+        // ============ 整蛊模式卡片 ============
+        root.addView(cardLabel("🦟 整蛊模式（和电脑版一样的蚊群拍打游戏）"));
+        LinearLayout prankCard = card();
+        LinearLayout pRow = new LinearLayout(this);
+        pRow.setOrientation(LinearLayout.HORIZONTAL);
+        prankCount = input("蚊子数量(1-10)");
+        prankCount.setText(String.valueOf(com.weng.weng.DataStore.getInt("prankCount", 6)));
+        LinearLayout.LayoutParams pcp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        pRow.addView(prankCount, pcp);
+        pRow.addView(gapW(6));
+        prankBtn = button("🦟 注入并隐藏");
+        prankBtn.setOnClickListener(v -> {
+            if (PetService.instance == null) return;
+            int n = 6;
+            try {
+                n = Integer.parseInt(prankCount.getText().toString().trim());
+            } catch (Exception ignored) {
+            }
+            n = Math.max(1, Math.min(10, n));
+            com.weng.weng.DataStore.putInt("prankCount", n);
+            if (PetService.instance.prankMode) {
+                PetService.instance.stopPrank();
+                Toast.makeText(this, "整蛊结束，蚊子回来了", Toast.LENGTH_SHORT).show();
+            } else {
+                PetService.instance.startPrank(n);
+                Toast.makeText(this, "蚊群已注入！回到桌面拍打它们", Toast.LENGTH_SHORT).show();
+            }
+            refresh();
+        });
+        pRow.addView(prankBtn);
+        prankCard.addView(pRow);
+        prankCard.addView(gap(6));
+        prankScore = small("#777777", Gravity.LEFT);
+        prankScore.setPadding(dp(4), 0, 0, dp(2));
+        prankCard.addView(prankScore);
+        root.addView(prankCard);
+        root.addView(gap(10));
+
         // ============ 更多玩法卡片 ============
         root.addView(cardLabel("🎮 更多玩法"));
         LinearLayout exCard = card();
@@ -286,6 +326,16 @@ public class SettingsActivity extends Activity {
             }
         });
         aboutRow.addView(upd);
+        aboutRow.addView(gapW(8));
+        TextView bootBtn = button("📲 开机自启：关");
+        bootBtn.setOnClickListener(v -> {
+            boolean on = !com.weng.weng.DataStore.getBool("bootAuto", false);
+            com.weng.weng.DataStore.putBool("bootAuto", on);
+            bootBtn.setText(on ? "📲 开机自启：开" : "📲 开机自启：关");
+            Toast.makeText(this, on ? "已开启（重启后生效）" : "已关闭", Toast.LENGTH_SHORT).show();
+        });
+        if (com.weng.weng.DataStore.getBool("bootAuto", false)) bootBtn.setText("📲 开机自启：开");
+        aboutRow.addView(bootBtn);
         aboutRow.addView(gapW(8));
         TextView quit = button("✖ 退出");
         quit.setOnClickListener(v -> {
@@ -526,6 +576,8 @@ public class SettingsActivity extends Activity {
         affLabel.setText("❤️ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天");
         if (emoLine != null) emoLine.setText("🧠 " + PetService.instance.emo.describe());
         if (feedLine != null) feedLine.setText("🩸 " + PetService.instance.feedStatusText());
+        if (prankScore != null) prankScore.setText("📊 " + PetService.instance.prankScoreText());
+        if (prankBtn != null) prankBtn.setText(PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏");
         verLabel.setText("v" + PetService.instance.curVersion() + (PetService.instance.dnd ? "（勿扰中）" : "") + (PetService.instance.workMode ? "（工作中）" : ""));
         dndBtn.setText(PetService.instance.dnd ? "🌙 勿扰中" : "🌙 勿扰");
         workBtn.setText(PetService.instance.workMode ? "📚 工作中" : "📚 工作");

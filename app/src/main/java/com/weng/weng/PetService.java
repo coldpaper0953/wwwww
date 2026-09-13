@@ -209,6 +209,10 @@ public class PetService extends Service implements Flyer.Host {
     private long feedAt = 0;
     private float feedX = 0, feedY = 0;
 
+    // ---------------- 阶段5：整蛊模式 ----------------
+    public PrankEngine prank = null;
+    public boolean prankMode = false;
+
     @Override
     public IBinder onBind(Intent i) { return null; }
 
@@ -1278,6 +1282,39 @@ public class PetService extends Service implements Flyer.Host {
 
     @Override
     public Handler handler() { return handler; }
+
+    // ---------------- 阶段5：整蛊模式开关（设置页调用） ----------------
+
+    /** 蚊群帧图来源 */
+    public int mosquitoRes() { return cruiseF[0]; }
+
+    public void startPrank(int count) {
+        if (prank == null) prank = new PrankEngine(new PrankEngine.Host() {
+            @Override public WindowManager wm() { return wm; }
+            @Override public android.os.Handler handler() { return handler; }
+            @Override public Random rnd() { return rnd; }
+            @Override public int screenW() { return screenW; }
+            @Override public int screenH() { return screenH; }
+        });
+        prankMode = true;
+        // 陪伴蚊先隐藏，让位给蚊群
+        pet.setVisibility(View.GONE);
+        hideBubble();
+        prank.start(count);
+        showBubble("蚊群入侵！快速点击拍打它们！拍满 40 只或撑过 10 分钟出 BOSS！", 6000);
+    }
+
+    public void stopPrank() {
+        if (prank != null) prank.stop();
+        prankMode = false;
+        pet.setVisibility(View.VISIBLE);
+    }
+
+    public String prankScoreText() {
+        org.json.JSONObject o = DataStore.obj("prankScore");
+        return "最高第 " + o.optInt("bestWave", 0) + " 波 · 累计击杀 " + o.optInt("totalKills", 0)
+                + (prankMode && prank != null ? " · 本局已杀 " + prank.kills() : "");
+    }
 
     // ---------------- App 内设置窗口相关 ----------------
 
