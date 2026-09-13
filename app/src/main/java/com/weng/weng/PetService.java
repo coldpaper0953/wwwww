@@ -168,7 +168,7 @@ public class PetService extends Service {
     private TextView bubble;
     private WindowManager.LayoutParams bubbleLP;
 
-    private int[] cruiseF = new int[5], happyF = new int[5], sadF = new int[5];
+    private int[] cruiseF = new int[5], happyF = new int[5], sadF = new int[5], workF = new int[5];
     private int frameIdx = 0, emoIdx = 0, emoLoops = 0;
     private boolean playingEmo, dead;
     private String state = "cruise";
@@ -182,6 +182,8 @@ public class PetService extends Service {
     private String updateUrl = null;
 
     public static PetService instance;
+    public volatile float speedMul = 1f;
+    private int deadRes;
     private long firstAt = 0;
     private final java.util.List<String> chatLog = java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
     public int affection;
@@ -202,6 +204,7 @@ public class PetService extends Service {
             sp.edit().putLong("first", firstAt).apply();
         }
         affection = sp.getInt("aff", 0);
+        speedMul = sp.getFloat("speedMul", 1f);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         DisplayMetrics dm = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(dm);
@@ -378,7 +381,9 @@ public class PetService extends Service {
             cruiseF[i - 1] = getResources().getIdentifier("mosquito_" + i, "drawable", getPackageName());
             happyF[i - 1] = getResources().getIdentifier("happy_" + i, "drawable", getPackageName());
             sadF[i - 1] = getResources().getIdentifier("sad_" + i, "drawable", getPackageName());
+            workF[i - 1] = getResources().getIdentifier("work_" + i, "drawable", getPackageName());
         }
+        deadRes = getResources().getIdentifier("dead", "drawable", getPackageName());
     }
 
     // ---------------- 宠物本体 ----------------
@@ -481,8 +486,8 @@ public class PetService extends Service {
             handler.postDelayed(this, 30);
             if (dead) return;
             if (state.equals("cruise") && !dragged && !dnd) {
-                px += vx;
-                py += vy;
+                px += vx * speedMul;
+                py += vy * speedMul;
                 float oldVx = vx, oldVy = vy;
                 clampPet();
                 if (vx != oldVx || vy != oldVy) randomizeVelocity();
@@ -509,8 +514,8 @@ public class PetService extends Service {
         public void run() {
             handler.postDelayed(this, 100);
             if (dead) {
-                pet.setImageResource(cruiseF[0]);
-                pet.setColorFilter(Color.GRAY);
+                pet.setImageResource(deadRes != 0 ? deadRes : cruiseF[0]);
+                pet.setColorFilter(null);
                 return;
             }
             if (playingEmo) {
@@ -647,6 +652,18 @@ public class PetService extends Service {
     public void userChat(String text) {
         logChat("你", text);
         aiChat("用户对你说：" + text);
+    }
+
+    public void setSpeedMul(float v) {
+        speedMul = Math.max(0.3f, Math.min(4f, v));
+        sp.edit().putFloat("speedMul", speedMul).apply();
+    }
+
+    public float getSpeedMul() { return speedMul; }
+
+    public void setAffection(int v) {
+        affection = Math.max(0, v);
+        sp.edit().putInt("aff", affection).apply();
     }
 
     public void toggleDnd() {
