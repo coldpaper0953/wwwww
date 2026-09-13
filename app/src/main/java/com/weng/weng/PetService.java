@@ -157,7 +157,7 @@ public class PetService extends Service {
 
 
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
+    public final Handler handler = new Handler(Looper.getMainLooper());
     private final Random rnd = new Random();
     private WindowManager wm;
     private int screenW, screenH;
@@ -167,9 +167,6 @@ public class PetService extends Service {
     private WindowManager.LayoutParams petLP;
     private TextView bubble;
     private WindowManager.LayoutParams bubbleLP;
-    private LinearLayout panel, inputBar;
-    private EditText inputEdit;
-    private TextView affBtn;
 
     private int[] cruiseF = new int[5], happyF = new int[5], sadF = new int[5];
     private int frameIdx = 0, emoIdx = 0, emoLoops = 0;
@@ -180,8 +177,12 @@ public class PetService extends Service {
     private long lastTapAt = 0, downAt = 0;
     private float downX, downY;
     private boolean dragged, petted;
-    private boolean dnd = false, pending = false, panelOn = false;
+    private boolean dnd = false, pending = false;
     private String updateUrl = null;
+
+    public static PetService instance;
+    private long firstAt = 0;
+    private final java.util.List<String> chatLog = java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
     private int affection;
     private long lastBubbleAt = 0;
 
@@ -192,6 +193,12 @@ public class PetService extends Service {
     public void onCreate() {
         super.onCreate();
         sp = getSharedPreferences("weng", MODE_PRIVATE);
+        instance = this;
+        firstAt = sp.getLong("first", 0);
+        if (firstAt == 0) {
+            firstAt = System.currentTimeMillis();
+            sp.edit().putLong("first", firstAt).apply();
+        }
         affection = sp.getInt("aff", 0);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         DisplayMetrics dm = new DisplayMetrics();
@@ -202,7 +209,6 @@ public class PetService extends Service {
         startForeground(1, buildNotification());
         createPet();
         createBubble();
-        createPanel();
         randomizeVelocity();
         handler.post(tickMove);
         handler.post(tickFrame);
@@ -212,7 +218,7 @@ public class PetService extends Service {
 
     // ---------------- 版本检查 + 热更新 ----------------
 
-    private String curVersion() {
+    public String curVersion() {
         try {
             return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception e) {
@@ -235,7 +241,7 @@ public class PetService extends Service {
     }
 
     /** 查询 GitHub 最新 Release；比当前新则下载 APK，完成后自动拉起安装器 */
-    private void checkUpdate() {
+    public void checkUpdate() {
         new Thread(() -> {
             try {
                 HttpURLConnection c = (HttpURLConnection) new URL(
@@ -323,7 +329,11 @@ public class PetService extends Service {
         Notification.Builder b = android.os.Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, "pet")
                 : new Notification.Builder(this);
-        return b.setContentTitle("嗡嗡嗡在飞").setSmallIcon(android.R.drawable.sym_def_app_icon).build();
+        android.app.PendingIntent pi = android.app.PendingIntent.getActivity(this, 0,
+                new Intent(this, SettingsActivity.class), android.app.PendingIntent.FLAG_IMMUTABLE);
+        return b.setContentTitle("嗡嗡嗡在飞").setContentText("点这里打开设置")
+                .setContentIntent(pi)
+                .setSmallIcon(android.R.drawable.sym_def_app_icon).build();
     }
 
 
@@ -402,8 +412,8 @@ public class PetService extends Service {
                     handler.postDelayed(() -> {
                         if (!dragged && !petted && System.currentTimeMillis() - downAt >= 1550 && !dead) {
                             petted = true;
-                            togglePanel();
-                            showBubble("功能面板～", 1200);
+                            openSettings();
+                            showBubble("打开设置啦～", 1200);
                         }
                     }, 1560);
                     return true;
@@ -624,180 +634,41 @@ public class PetService extends Service {
         return t;
     }
 
-    private void createPanel() {
-        panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.HORIZONTAL);
-        panel.setPadding(dp(8), dp(6), dp(8), dp(6));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#88101828"));
-        bg.setCornerRadius(dp(22));
-        panel.setBackground(bg);
+    // ---------------- App 内设置窗口相关 ----------------
 
-        TextView chat = miniBtn("💬 聊天");
-        affBtn = miniBtn("❤️ " + affection);
-        TextView dndBtn = miniBtn("🌙 勿扰");
-        TextView updBtn = miniBtn("🔄 v" + curVersion());
-        TextView exit = miniBtn("✖");
-        panel.addView(chat);
-        panel.addView(affBtn);
-        panel.addView(dndBtn);
-        panel.addView(updBtn);
-        panel.addView(exit);
-
-        LinearLayout.LayoutParams lp0 = (LinearLayout.LayoutParams) chat.getLayoutParams();
-        lp0.rightMargin = dp(8);
-        LinearLayout.LayoutParams lp1 = (LinearLayout.LayoutParams) affBtn.getLayoutParams();
-        lp1.rightMargin = dp(8);
-        LinearLayout.LayoutParams lp2 = (LinearLayout.LayoutParams) dndBtn.getLayoutParams();
-        lp2.rightMargin = dp(8);
-        LinearLayout.LayoutParams lp3 = (LinearLayout.LayoutParams) updBtn.getLayoutParams();
-        lp3.rightMargin = dp(8);
-
-        WindowManager.LayoutParams plp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-                PixelFormat.TRANSLUCENT);
-        plp.gravity = Gravity.TOP | Gravity.START;
-        plp.x = screenW / 2 - dp(120);
-        plp.y = dp(24);
-        panel.setTag(plp);
-        wm.addView(panel, plp);
-        panel.setVisibility(View.GONE);
-
-        // 面板可拖动
-        panel.setOnTouchListener((v, ev) -> {
-            if (ev.getActionMasked() == MotionEvent.ACTION_MOVE) {
-                plp.x = (int) (ev.getRawX() - panel.getWidth() / 2f);
-                plp.y = (int) Math.max(20, ev.getRawY() - panel.getHeight() / 2f);
-                try { wm.updateViewLayout(panel, plp); } catch (Exception ignored) {}
-                return true;
-            }
-            return false;
-        });
-
-        chat.setOnClickListener(v -> { v.requestFocus(); toggleInput(); });
-        dndBtn.setOnClickListener(v -> {
-            dnd = !dnd;
-            dndBtn.setText(dnd ? "🌙 勿扰中" : "🌙 勿扰");
-            showBubble(dnd ? "好困…我睡一会儿，你别吵" : "睡饱啦！继续飞～", 2000);
-        });
-        updBtn.setOnClickListener(v -> {
-            showBubble("检查更新中…", 4000);
-            new Thread(() -> {
-                try {
-                    HttpURLConnection c = (HttpURLConnection) new URL(
-                            "https://api.github.com/repos/coldpaper0953/wwwww/releases/latest").openConnection();
-                    c.setRequestProperty("Accept", "application/vnd.github+json");
-                    c.setConnectTimeout(15000);
-                    c.setReadTimeout(20000);
-                    InputStream is = c.getInputStream();
-                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                    byte[] buf = new byte[8192];
-                    int n;
-                    while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
-                    is.close();
-                    JSONObject j = new JSONObject(bos.toString("UTF-8"));
-                    final String tag = j.optString("tag_name", "");
-                    String assetUrl = null;
-                    if (!tag.isEmpty() && verCmp(tag, curVersion()) > 0) {
-                        org.json.JSONArray assets = j.optJSONArray("assets");
-                        if (assets != null) {
-                            for (int i = 0; i < assets.length(); i++) {
-                                JSONObject a = assets.getJSONObject(i);
-                                if (a.optString("name", "").endsWith(".apk")) {
-                                    assetUrl = a.optString("browser_download_url");
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    final String fAsset = assetUrl;
-                    handler.post(() -> {
-                        if (tag.isEmpty()) {
-                            showBubble("暂时查不到版本信息", 2500);
-                        } else if (fAsset != null) {
-                            showBubble("有新版本 " + tag + "，正在下载…", 8000);
-                            downloadAndInstall(fAsset);
-                        } else {
-                            showBubble("已经是最新版 v" + curVersion() + "～", 2500);
-                        }
-                    });
-                } catch (Exception e) {
-                    handler.post(() -> showBubble("检查更新失败，看看网络？", 2500));
-                }
-            }).start();
-        });
-        exit.setOnClickListener(v -> stopSelf());
-        refreshAff();
+    public void openSettings() {
+        Intent i = new Intent(this, SettingsActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
     }
 
-    /** 点宠物左上角的小三角区域即可打开面板？——改为：四指/双指不便，直接提供手势：快速双击宠物后 0.4s 内再点击即开关面板 */
-    private void togglePanel() {
-        panelOn = !panelOn;
-        panel.setVisibility(panelOn ? View.VISIBLE : View.GONE);
-        if (!panelOn) hideInput();
+    public void userChat(String text) {
+        logChat("你", text);
+        aiChat("用户对你说：" + text);
     }
 
-    private void toggleInput() {
-        if (inputBar != null && inputBar.getParent() != null) {
-            boolean vis = inputBar.getVisibility() == View.VISIBLE;
-            inputBar.setVisibility(vis ? View.GONE : View.VISIBLE);
-            if (!vis) {
-                inputEdit.requestFocus();
-                return;
-            }
-            return;
+    public void toggleDnd() {
+        dnd = !dnd;
+        showBubble(dnd ? "好困…我睡一会儿，你别吵" : "睡饱啦！继续飞～", 2000);
+    }
+
+    public int daysCount() {
+        return (int) ((System.currentTimeMillis() - firstAt) / 86400000L) + 1;
+    }
+
+    public void logChat(String who, String text) {
+        synchronized (chatLog) {
+            chatLog.add(who + "：" + text);
+            while (chatLog.size() > 40) chatLog.remove(0);
         }
-        buildInputBar();
     }
 
-    private void buildInputBar() {
-        inputBar = new LinearLayout(this);
-        inputBar.setOrientation(LinearLayout.HORIZONTAL);
-        inputBar.setPadding(dp(10), dp(8), dp(10), dp(8));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#EE16233C"));
-        bg.setCornerRadius(dp(20));
-        inputBar.setBackground(bg);
-
-        inputEdit = new EditText(this);
-        inputEdit.setHint("跟凌九霄的蚊子说点什么…");
-        inputEdit.setTextColor(Color.WHITE);
-        inputEdit.setHintTextColor(Color.parseColor("#7790B8"));
-        inputEdit.setTextSize(13);
-        inputEdit.setMaxLines(1);
-        inputEdit.setBackground(null);
-        LinearLayout.LayoutParams ep = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        inputBar.addView(inputEdit, ep);
-
-        TextView send = miniBtn("发送");
-        inputBar.addView(send);
-
-        WindowManager.LayoutParams ilp = new WindowManager.LayoutParams(
-                (int) (screenW * 0.92f), WindowManager.LayoutParams.WRAP_CONTENT,
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-                PixelFormat.TRANSLUCENT);
-        ilp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
-        ilp.y = dp(60);
-        wm.addView(inputBar, ilp);
-        inputBar.setVisibility(View.VISIBLE);
-
-        send.setOnClickListener(v -> {
-            String text = inputEdit.getText().toString().trim();
-            if (text.isEmpty()) return;
-            inputEdit.setText("");
-            aiChat("用户对你说：" + text);
-        });
-    }
-
-    private void hideInput() {
-        if (inputBar != null) inputBar.setVisibility(View.GONE);
-    }
-
-    private void refreshAff() {
-        affBtn.setText("❤️ " + affection);
+    public String chatLogText() {
+        synchronized (chatLog) {
+            StringBuilder sb = new StringBuilder();
+            for (String l : chatLog) sb.append(l).append('\n');
+            return sb.toString();
+        }
     }
 
     // ---------------- 好感度 / 台词 ----------------
@@ -805,7 +676,6 @@ public class PetService extends Service {
     private void addAffection(int n) {
         affection += n;
         sp.edit().putInt("aff", affection).apply();
-        refreshAff();
     }
 
     private String pick(String... a) { return a[rnd.nextInt(a.length)]; }
@@ -863,6 +733,7 @@ public class PetService extends Service {
                 }
             } catch (Exception ignored) {}
             final String fReply = reply;
+            logChat("蚊", fReply == null ? pick(FALLBACK) : fReply);
             handler.post(() -> {
                 pending = false;
                 if (fReply == null) showBubble(pick(FALLBACK), 3000);
@@ -878,8 +749,9 @@ public class PetService extends Service {
 
     @Override
     public void onDestroy() {
+        instance = null;
         handler.removeCallbacksAndMessages(null);
-        for (View v : new View[]{pet, bubble, panel, inputBar}) {
+        for (View v : new View[]{pet, bubble}) {
             if (v != null) try { wm.removeView(v); } catch (Exception ignored) {}
         }
         super.onDestroy();
