@@ -293,8 +293,9 @@ public class PetService extends Service {
                 fos.flush();
                 fos.close();
                 is.close();
+                final long ftotal = total;
                 handler.post(() -> {
-                    showBubble("新版本下载完成（" + (total / 1024) + "KB），拉起安装～", 5000);
+                    showBubble("新版本下载完成（" + (ftotal / 1024) + "KB），拉起安装～", 5000);
                     installUpdate();
                 });
             } catch (Exception e) {
@@ -698,23 +699,26 @@ public class PetService extends Service {
                     is.close();
                     JSONObject j = new JSONObject(bos.toString("UTF-8"));
                     final String tag = j.optString("tag_name", "");
+                    String assetUrl = null;
+                    if (!tag.isEmpty() && verCmp(tag, curVersion()) > 0) {
+                        org.json.JSONArray assets = j.optJSONArray("assets");
+                        if (assets != null) {
+                            for (int i = 0; i < assets.length(); i++) {
+                                JSONObject a = assets.getJSONObject(i);
+                                if (a.optString("name", "").endsWith(".apk")) {
+                                    assetUrl = a.optString("browser_download_url");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    final String fAsset = assetUrl;
                     handler.post(() -> {
                         if (tag.isEmpty()) {
                             showBubble("暂时查不到版本信息", 2500);
-                        } else if (verCmp(tag, curVersion()) > 0) {
+                        } else if (fAsset != null) {
                             showBubble("有新版本 " + tag + "，正在下载…", 8000);
-                            String assetUrl = null;
-                            org.json.JSONArray assets = j.optJSONArray("assets");
-                            if (assets != null) {
-                                for (int i = 0; i < assets.length(); i++) {
-                                    JSONObject a = assets.getJSONObject(i);
-                                    if (a.optString("name", "").endsWith(".apk")) {
-                                        assetUrl = a.optString("browser_download_url");
-                                        break;
-                                    }
-                                }
-                            }
-                            if (assetUrl != null) downloadAndInstall(assetUrl);
+                            downloadAndInstall(fAsset);
                         } else {
                             showBubble("已经是最新版 v" + curVersion() + "～", 2500);
                         }
