@@ -357,10 +357,6 @@ public class SettingsActivity extends Activity {
             boolean on = !com.weng.weng.DataStore.getBool("appSense", true);
             com.weng.weng.DataStore.putBool("appSense", on);
             if (on) {
-                try {
-                    android.provider.Settings.putString(getContentResolver(), "mock", null);
-                } catch (Exception ignored) {
-                }
                 // 引导去系统授权"使用情况访问权限"
                 new AlertDialog.Builder(this)
                         .setTitle("App 感知说明")
