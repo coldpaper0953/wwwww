@@ -183,7 +183,7 @@ public class SettingsActivity extends Activity {
         // ============ API 卡片 ============
         root.addView(cardLabel("🔌 AI 接口（可换服务商）"));
         LinearLayout apiCard = card();
-        final EditText apiBase = apiInput("接口地址（完整 chat/completions 地址）",
+        final EditText apiBase = apiInput("接口地址：填 https://api.xxx.com/v1 即可（v2/v3/本地http端口均可，自动补全）",
                 PetService.instance != null ? PetService.instance.apiBase : "");
         apiCard.addView(apiBase);
         apiCard.addView(gap(6));

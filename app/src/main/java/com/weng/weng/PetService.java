@@ -682,6 +682,20 @@ public class PetService extends Service {
         apiModel = sp.getString("apiModel", MODEL);
     }
 
+    /** 接口地址智能补全：
+     *  填根地址 https://api.x.com            -> https://api.x.com/chat/completions
+     *  填版本根 https://api.x.com/v1 或 /v3   -> .../v1/chat/completions
+     *  已填完整 .../chat/completions          -> 原样使用
+     *  末尾加 #                               -> 强制原样（特殊网关） */
+    private static String normalizeEndpoint(String base) {
+        String u = base == null ? "" : base.trim();
+        if (u.length() == 0) return u;
+        if (u.endsWith("#")) return u.substring(0, u.length() - 1).trim();
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        if (u.endsWith("/chat/completions")) return u;
+        return u + "/chat/completions";
+    }
+
     public void setApi(String base, String key, String model) {
         if (base != null && base.trim().length() > 0) apiBase = base.trim();
         if (key != null && key.trim().length() > 0) apiKey = key.trim();
@@ -827,7 +841,7 @@ public class PetService extends Service {
         new Thread(() -> {
             String reply = null;
             try {
-                HttpURLConnection c = (HttpURLConnection) new URL(apiBase).openConnection();
+                HttpURLConnection c = (HttpURLConnection) new URL(normalizeEndpoint(apiBase)).openConnection();
                 c.setRequestMethod("POST");
                 c.setRequestProperty("Content-Type", "application/json");
                 c.setRequestProperty("Authorization", "Bearer " + apiKey);
