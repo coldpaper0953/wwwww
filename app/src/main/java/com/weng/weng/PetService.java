@@ -180,6 +180,7 @@ public class PetService extends Service {
     private float downX, downY;
     private boolean dragged, petted;
     private boolean dnd = false, pending = false, panelOn = false;
+    private String updateUrl = null;
     private int affection;
     private long lastBubbleAt = 0;
 
@@ -205,6 +206,112 @@ public class PetService extends Service {
         handler.post(tickMove);
         handler.post(tickFrame);
         handler.postDelayed(this::firstGreeting, 800);
+        handler.postDelayed(this::checkUpdate, 5000);
+    }
+
+    // ---------------- 版本检查 + 热更新 ----------------
+
+    private String curVersion() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "1.0";
+        }
+    }
+
+    private static int verCmp(String a, String b) {
+        try {
+            String[] sa = a.replace("v", "").split("\\.");
+            String[] sb = b.replace("v", "").split("\\.");
+            int len = Math.max(sa.length, sb.length);
+            for (int i = 0; i < len; i++) {
+                int x = i < sa.length ? Integer.parseInt(sa[i].trim()) : 0;
+                int y = i < sb.length ? Integer.parseInt(sb[i].trim()) : 0;
+                if (x != y) return x - y;
+            }
+        } catch (Exception ignored) {}
+        return 0;
+    }
+
+    /** 查询 GitHub 最新 Release；比当前新则下载 APK，完成后自动拉起安装器 */
+    private void checkUpdate() {
+        new Thread(() -> {
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL(
+                        "https://api.github.com/repos/coldpaper0953/wwwww/releases/latest").openConnection();
+                c.setRequestProperty("Accept", "application/vnd.github+json");
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(20000);
+                InputStream is = c.getInputStream();
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                is.close();
+                JSONObject j = new JSONObject(bos.toString("UTF-8"));
+                final String tag = j.optString("tag_name", "");
+                String assetUrl = null;
+                org.json.JSONArray assets = j.optJSONArray("assets");
+                if (assets != null) {
+                    for (int i = 0; i < assets.length(); i++) {
+                        JSONObject a = assets.getJSONObject(i);
+                        if (a.optString("name", "").endsWith(".apk")) {
+                            assetUrl = a.optString("browser_download_url");
+                            break;
+                        }
+                    }
+                }
+                if (tag.isEmpty() || assetUrl == null) return;
+                if (verCmp(tag, curVersion()) <= 0) return;
+                handler.post(() -> showBubble("发现新版本 " + tag + "！正在下载…", 8000));
+                downloadAndInstall(assetUrl);
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
+    private void downloadAndInstall(String url) {
+        new Thread(() -> {
+            try {
+                File dir = getExternalFilesDir(null);
+                if (dir == null) dir = getFilesDir();
+                File out = new File(dir, "update.apk");
+                if (out.exists()) out.delete();
+                HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                c.setConnectTimeout(20000);
+                c.setReadTimeout(120000);
+                InputStream is = c.getInputStream();
+                java.io.FileOutputStream fos = new java.io.FileOutputStream(out);
+                byte[] buf = new byte[16384];
+                int n;
+                long total = 0;
+                while ((n = is.read(buf)) > 0) {
+                    fos.write(buf, 0, n);
+                    total += n;
+                }
+                fos.flush();
+                fos.close();
+                is.close();
+                handler.post(() -> {
+                    showBubble("新版本下载完成（" + (total / 1024) + "KB），拉起安装～", 5000);
+                    installUpdate();
+                });
+            } catch (Exception e) {
+                handler.post(() -> showBubble("更新下载失败，稍后再试", 3000));
+            }
+        }).start();
+    }
+
+    private void installUpdate() {
+        try {
+            android.net.Uri uri = android.net.Uri.parse("content://com.weng.weng.updatefiles/update.apk");
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, "application/vnd.android.package-archive");
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            showBubble("安装未启动：请在系统设置里允许本应用安装", 4000);
+        }
     }
 
     private Notification buildNotification() {
@@ -527,10 +634,12 @@ public class PetService extends Service {
         TextView chat = miniBtn("💬 聊天");
         affBtn = miniBtn("❤️ " + affection);
         TextView dndBtn = miniBtn("🌙 勿扰");
+        TextView updBtn = miniBtn("🔄 v" + curVersion());
         TextView exit = miniBtn("✖");
         panel.addView(chat);
         panel.addView(affBtn);
         panel.addView(dndBtn);
+        panel.addView(updBtn);
         panel.addView(exit);
 
         LinearLayout.LayoutParams lp0 = (LinearLayout.LayoutParams) chat.getLayoutParams();
@@ -539,6 +648,8 @@ public class PetService extends Service {
         lp1.rightMargin = dp(8);
         LinearLayout.LayoutParams lp2 = (LinearLayout.LayoutParams) dndBtn.getLayoutParams();
         lp2.rightMargin = dp(8);
+        LinearLayout.LayoutParams lp3 = (LinearLayout.LayoutParams) updBtn.getLayoutParams();
+        lp3.rightMargin = dp(8);
 
         WindowManager.LayoutParams plp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
@@ -568,6 +679,49 @@ public class PetService extends Service {
             dnd = !dnd;
             dndBtn.setText(dnd ? "🌙 勿扰中" : "🌙 勿扰");
             showBubble(dnd ? "好困…我睡一会儿，你别吵" : "睡饱啦！继续飞～", 2000);
+        });
+        updBtn.setOnClickListener(v -> {
+            showBubble("检查更新中…", 4000);
+            new Thread(() -> {
+                try {
+                    HttpURLConnection c = (HttpURLConnection) new URL(
+                            "https://api.github.com/repos/coldpaper0953/wwwww/releases/latest").openConnection();
+                    c.setRequestProperty("Accept", "application/vnd.github+json");
+                    c.setConnectTimeout(15000);
+                    c.setReadTimeout(20000);
+                    InputStream is = c.getInputStream();
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    byte[] buf = new byte[8192];
+                    int n;
+                    while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                    is.close();
+                    JSONObject j = new JSONObject(bos.toString("UTF-8"));
+                    final String tag = j.optString("tag_name", "");
+                    handler.post(() -> {
+                        if (tag.isEmpty()) {
+                            showBubble("暂时查不到版本信息", 2500);
+                        } else if (verCmp(tag, curVersion()) > 0) {
+                            showBubble("有新版本 " + tag + "，正在下载…", 8000);
+                            String assetUrl = null;
+                            org.json.JSONArray assets = j.optJSONArray("assets");
+                            if (assets != null) {
+                                for (int i = 0; i < assets.length(); i++) {
+                                    JSONObject a = assets.getJSONObject(i);
+                                    if (a.optString("name", "").endsWith(".apk")) {
+                                        assetUrl = a.optString("browser_download_url");
+                                        break;
+                                    }
+                                }
+                            }
+                            if (assetUrl != null) downloadAndInstall(assetUrl);
+                        } else {
+                            showBubble("已经是最新版 v" + curVersion() + "～", 2500);
+                        }
+                    });
+                } catch (Exception e) {
+                    handler.post(() -> showBubble("检查更新失败，看看网络？", 2500));
+                }
+            }).start();
         });
         exit.setOnClickListener(v -> stopSelf());
         refreshAff();
