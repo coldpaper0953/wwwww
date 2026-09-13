@@ -26,6 +26,8 @@ public class SettingsActivity extends Activity {
     private TextView emoLine, feedLine;
     private TextView prankScore, prankBtn;
     private EditText prankCount;
+    private TextView[] glideBtns;
+    private TextView tabBtn, senseBtn;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -312,6 +314,69 @@ public class SettingsActivity extends Activity {
         root.addView(exCard);
         root.addView(gap(10));
 
+        // ============ 交互与感知卡片 ============
+        root.addView(cardLabel("🖐 交互与感知"));
+        LinearLayout ixCard = card();
+
+        // 惯性档位
+        ixCard.addView(rowLabel("甩动惯性（松手后滑行衰减）"));
+        LinearLayout glideRow = new LinearLayout(this);
+        glideRow.setOrientation(LinearLayout.HORIZONTAL);
+        String[] lvNames = {"关", "轻", "中", "强"};
+        glideBtns = new TextView[4];
+        for (int i = 0; i < 4; i++) {
+            final int lv = i;
+            TextView b = button(lvNames[i]);
+            b.setOnClickListener(v -> {
+                if (PetService.instance != null) {
+                    PetService.instance.setGlideLevel(lv);
+                    refresh();
+                }
+            });
+            glideRow.addView(b);
+            if (i < 3) glideRow.addView(gapW(6));
+            glideBtns[i] = b;
+        }
+        ixCard.addView(glideRow);
+        ixCard.addView(gap(8));
+
+        // 拉手开关
+        LinearLayout tabRow = new LinearLayout(this);
+        tabRow.setOrientation(LinearLayout.HORIZONTAL);
+        tabBtn = button("💬 屏幕拉手：开");
+        tabBtn.setOnClickListener(v -> {
+            if (PetService.instance == null) return;
+            boolean on = !com.weng.weng.DataStore.getBool("tabHandle", true);
+            PetService.instance.setTabHandleVisible(on);
+            refresh();
+        });
+        tabRow.addView(tabBtn);
+        tabRow.addView(gapW(8));
+        senseBtn = button("👁 App感知：?");
+        senseBtn.setOnClickListener(v -> {
+            boolean on = !com.weng.weng.DataStore.getBool("appSense", true);
+            com.weng.weng.DataStore.putBool("appSense", on);
+            if (on) {
+                try {
+                    android.provider.Settings.putString(getContentResolver(), "mock", null);
+                } catch (Exception ignored) {
+                }
+                // 引导去系统授权"使用情况访问权限"
+                new AlertDialog.Builder(this)
+                        .setTitle("App 感知说明")
+                        .setMessage("蚊子只读取「当前打开的应用名字」（不读内容）。\n\n要让它生效，请在接下来的系统页面里找到 嗡嗡嗡，允许「使用情况访问权限」。")
+                        .setPositiveButton("去授权", (d, w) -> startActivity(new Intent(
+                                android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)))
+                        .setNegativeButton("取消", null)
+                        .show();
+            }
+            refresh();
+        });
+        tabRow.addView(senseBtn);
+        ixCard.addView(tabRow);
+        root.addView(ixCard);
+        root.addView(gap(10));
+
         // ============ 更新与关于卡片 ============
         root.addView(cardLabel("⚙️ 更新与关于"));
         LinearLayout aboutCard = card();
@@ -577,6 +642,19 @@ public class SettingsActivity extends Activity {
         if (feedLine != null) feedLine.setText("🩸 " + PetService.instance.feedStatusText());
         if (prankScore != null) prankScore.setText("📊 " + PetService.instance.prankScoreText());
         if (prankBtn != null) prankBtn.setText(PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏");
+        // 惯性档位高亮：选中档加粗+标 ●
+        int lv = PetService.instance.glideLevel();
+        String[] lvNames = {"关", "轻", "中", "强"};
+        for (int i = 0; i < glideBtns.length; i++) {
+            if (glideBtns[i] != null)
+                glideBtns[i].setText((i == lv ? "● " : "") + lvNames[i]);
+        }
+        if (tabBtn != null) tabBtn.setText(com.weng.weng.DataStore.getBool("tabHandle", true) ? "💬 屏幕拉手：开" : "💬 屏幕拉手：关");
+        if (senseBtn != null) {
+            boolean on = com.weng.weng.DataStore.getBool("appSense", true);
+            String cur = PetService.instance.currentAppLabelPublic();
+            senseBtn.setText(on ? ("👁 App感知：开" + (cur == null ? "（未授权）" : "（当前:" + cur + "）")) : "👁 App感知：关");
+        }
         verLabel.setText("v" + PetService.instance.curVersion() + (PetService.instance.dnd ? "（勿扰中）" : "") + (PetService.instance.workMode ? "（工作中）" : ""));
         dndBtn.setText(PetService.instance.dnd ? "🌙 勿扰中" : "🌙 勿扰");
         workBtn.setText(PetService.instance.workMode ? "📚 工作中" : "📚 工作");

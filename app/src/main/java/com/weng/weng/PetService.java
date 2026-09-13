@@ -209,6 +209,22 @@ public class PetService extends Service implements Flyer.Host {
     private long feedAt = 0;
     private float feedX = 0, feedY = 0;
 
+    // 甩动惯性：拖动速度采样
+    private float dragVx = 0, dragVy = 0;
+    private float lastMoveX = 0, lastMoveY = 0;
+    private long lastMoveAt = 0;
+
+    // 时间感知：时段名+跨时段问候
+    private String lastPeriod = null;
+
+    // 屏幕边缘小拉手 + 悬浮聊天框
+    private TextView tabHandle;
+    private WindowManager.LayoutParams tabLP;
+    private LinearLayout chatPanel;
+    private WindowManager.LayoutParams chatLP;
+    private EditText chatIn;
+    private TextView chatStatus;
+
     // ---------------- 阶段5：整蛊模式 ----------------
     public PrankEngine prank = null;
     public boolean prankMode = false;
@@ -246,6 +262,7 @@ public class PetService extends Service implements Flyer.Host {
         startForeground(1, buildNotification());
         createPet();
         createBubble();
+        createTabHandle();
         randomizeVelocity();
         handler.post(tickMove);
         handler.post(tickFrame);
@@ -490,6 +507,15 @@ public class PetService extends Service implements Flyer.Host {
                     float mx = ev.getRawX(), my = ev.getRawY();
                     if (Math.hypot(mx - downX, my - downY) > 18) {
                         dragged = true;
+                        // 速度采样（松手惯性用）：记最近一次 MOVE 的位移/时间
+                        long nowT = System.currentTimeMillis();
+                        if (nowT > lastMoveAt) {
+                            dragVx = (mx - lastMoveX) / (nowT - lastMoveAt) * 16f;   // 换算成每帧(30ms的一半)位移的量级
+                            dragVy = (my - lastMoveY) / (nowT - lastMoveAt) * 16f;
+                        }
+                        lastMoveX = mx;
+                        lastMoveY = my;
+                        lastMoveAt = nowT;
                         px = mx - curSize() / 2f;
                         py = my - curSize() / 2f;
                         clampPet();
@@ -509,7 +535,24 @@ public class PetService extends Service implements Flyer.Host {
                     float ux = ev.getRawX(), uy = ev.getRawY();
                     long dur = System.currentTimeMillis() - downAt;
                     float dist = (float) Math.hypot(ux - downX, uy - downY);
-                    if (petted || dead || dragged) return true;
+                    if (petted || dead || dragged) {
+                        if (dragged) {
+                            // 甩动惯性：快甩→扔出坠落；普通拖放→按松手速度滑行衰减
+                            float speed = (float) Math.hypot(dragVx, dragVy);
+                            if (dist > 60 && speed > 18f) {          // 快甩：扔出
+                                state = "falling";
+                                emo.add("生气", 8);
+                                showBubble(q("throw"), 1500);
+                            } else if (speed > 1.2f) {                // 惯性滑行
+                                fly.glide(dragVx, dragVy);
+                                if (speed > 8f) showBubble("woooo～惯性滑翔！", 1500);
+                            } else {
+                                fly.switchTo("cruise", 0);            // 慢放：原地恢复巡航
+                            }
+                        }
+                        lastInteractAt = System.currentTimeMillis();
+                        return true;
+                    }
                     lastInteractAt = System.currentTimeMillis();
                     if (dist > 60) {                      // 扔出去
                         state = "falling";
@@ -915,11 +958,12 @@ public class PetService extends Service implements Flyer.Host {
         }
     }
 
-    /** 60s：情绪漂移+心情记录+主导切换播表情 */
+    /** 60s：情绪漂移+心情记录+主导切换播表情+时间感知跨时段问候 */
     private void moodTick() {
         handler.postDelayed(this::moodTick, 60000);
         long mins = (System.currentTimeMillis() - lastInteractAt) / 60000L;
         emo.drift(mins);
+        timeSenseTick();
         String d = emo.dominant();
         if (d != null && !d.equals(lastDominant)) {
             lastDominant = d;
@@ -1072,7 +1116,7 @@ public class PetService extends Service implements Flyer.Host {
         if (dnd || napping || dead || workMode || pending) return;
         if (System.currentTimeMillis() - Math.max(lastAiAt, lastInteractAt) < 45000) return;
         String app = currentAppLabel();
-        boolean talkApp = rnd.nextInt(100) < 60 && app != null;
+        boolean talkApp = DataStore.getBool("appSense", true) && rnd.nextInt(100) < 60 && app != null;
         String topic = talkApp ? "（用户正在用 " + app + "，随口吐槽或调侃一句，要短）"
                 : randomTopic();
         if (topic == null) return;
@@ -1111,6 +1155,7 @@ public class PetService extends Service implements Flyer.Host {
     private void appSenseTick() {
         handler.postDelayed(this::appSenseTick, 25000);
         if (dead || napping) return;
+        if (!DataStore.getBool("appSense", true)) return;   // 感知总开关
         String app = currentAppLabel();
         if (app == null) return;
         String appKey = appKeyOf(app);
@@ -1157,6 +1202,12 @@ public class PetService extends Service implements Flyer.Host {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /** 给设置页显示当前前台应用名（App 感知开且查得到才有值） */
+    public String currentAppLabelPublic() {
+        if (!DataStore.getBool("appSense", true)) return null;
+        return currentAppLabel();
     }
 
     /** 应用归类（对应电脑版 APP_KEYWORDS 六类+音乐+会议） */
@@ -1278,10 +1329,197 @@ public class PetService extends Service implements Flyer.Host {
     public float speedMul() { return speedMul; }
 
     @Override
+    public float glideFriction() { return frictionFor(glideLevel()); }
+
+    @Override
     public Random rnd() { return rnd; }
 
     @Override
     public Handler handler() { return handler; }
+
+    // ---------------- 阶段7：时间感知 / 拉手聊天 / 惯性档位 ----------------
+
+    /** 惯性摩擦系数：档位 0关(1.0=无惯性) 1轻(0.90) 2中(0.94) 3强(0.965)——数值越大滑得越远 */
+    public int glideLevel() { return DataStore.getInt("glideLevel", 2); }
+
+    public void setGlideLevel(int lv) {
+        DataStore.putInt("glideLevel", Math.max(0, Math.min(3, lv)));
+    }
+
+    private static float frictionFor(int lv) {
+        switch (lv) {
+            case 0: return 0f;      // 关：松手不滑行
+            case 1: return 0.90f;
+            case 3: return 0.965f;
+            default: return 0.94f;
+        }
+    }
+
+    /** 时间感知：返回 [时段名, 问候语]；凌晨/清晨/上午/中午/下午/傍晚/晚上/深夜 */
+    public static String[] timePeriod() {
+        int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        if (h < 5) return new String[]{"凌晨", "都凌晨了还不睡？！"};
+        if (h < 8) return new String[]{"清晨", "早起的蚊子有血吸～早！"};
+        if (h < 12) return new String[]{"上午", "上午好！今天打算干点什么？"};
+        if (h < 14) return new String[]{"中午", "中午啦，记得吃饭别糊弄～"};
+        if (h < 18) return new String[]{"下午", "下午好，起来活动活动～"};
+        if (h < 20) return new String[]{"傍晚", "傍晚了，今天过得咋样？"};
+        if (h < 23) return new String[]{"晚上", "晚上好～放松一下吧"};
+        return new String[]{"深夜", "都深夜了，早点睡！"};
+    }
+
+    /** 60s 轮询：跨时段播报问候（挂在 moodTick 里调）；AI 提示词也带上当前时间 */
+    private void timeSenseTick() {
+        String[] p = timePeriod();
+        if (!p[0].equals(lastPeriod)) {
+            boolean first = lastPeriod == null;
+            lastPeriod = p[0];
+            if (!first && !dnd && !napping && !dead) {
+                showBubble("🕐 " + p[0] + "了。" + p[1], 4000);
+            }
+        }
+    }
+
+    /** 屏幕右缘小拉手：点开=悬浮聊天框；聊天框可输可发，还显示当前前台 App 名 */
+    private void createTabHandle() {
+        tabHandle = new TextView(this);
+        tabHandle.setText("💬");
+        tabHandle.setTextSize(18);
+        tabHandle.setTextColor(Color.WHITE);
+        tabHandle.setGravity(Gravity.CENTER);
+        tabHandle.setPadding(0, dp(10), 0, dp(10));
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(Color.parseColor("#CC1B2A4A"));
+        g.setCornerRadii(new float[]{dp(14), 0, 0, dp(14), dp(14), 0, 0, dp(14)});   // 左圆右直，贴边
+        tabHandle.setBackground(g);
+        tabLP = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
+        tabLP.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+        tabHandle.setOnClickListener(v -> toggleChatPanel());
+        try { wm.addView(tabHandle, tabLP); } catch (Exception ignored) {}
+        // 初始隐藏与否跟设置走
+        tabHandle.setVisibility(DataStore.getBool("tabHandle", true) ? View.VISIBLE : View.GONE);
+    }
+
+    public void setTabHandleVisible(boolean on) {
+        DataStore.putBool("tabHandle", on);
+        if (tabHandle != null) tabHandle.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (!on && chatPanel != null) chatPanel.setVisibility(View.GONE);
+    }
+
+    /** 悬浮聊天框：挂屏幕右侧（宽 78%），顶部显示当前前台应用名 */
+    private void toggleChatPanel() {
+        if (chatPanel == null) {
+            buildChatPanel();
+        }
+        if (chatPanel.getVisibility() == View.VISIBLE) {
+            chatPanel.setVisibility(View.GONE);
+            // 收起时保持不可聚焦（不挡底层操作）
+            chatLP.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+            try { wm.updateViewLayout(chatPanel, chatLP); } catch (Exception ignored) {}
+        } else {
+            refreshChatStatus();
+            // 展开时允许输入框拿焦点弹软键盘
+            chatLP.flags = WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+            try { wm.updateViewLayout(chatPanel, chatLP); } catch (Exception ignored) {}
+            chatPanel.setVisibility(View.VISIBLE);
+            chatIn.requestFocus();
+            refreshChatLog();
+        }
+    }
+
+    private void buildChatPanel() {
+        chatPanel = new LinearLayout(this);
+        chatPanel.setOrientation(LinearLayout.VERTICAL);
+        chatPanel.setPadding(dp(10), dp(10), dp(10), dp(10));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#E8FFFFFF"));
+        bg.setCornerRadius(dp(16));
+        bg.setStroke(dp(2), Color.parseColor("#111111"));
+        chatPanel.setBackground(bg);
+
+        chatStatus = new TextView(this);
+        chatStatus.setTextSize(11);
+        chatStatus.setTextColor(Color.parseColor("#666666"));
+        chatStatus.setPadding(dp(4), 0, dp(4), dp(4));
+        chatPanel.addView(chatStatus);
+
+        TextView log = new TextView(this);
+        log.setTextSize(12);
+        log.setTextColor(Color.parseColor("#111111"));
+        log.setMaxLines(8);
+        chatLogView = log;
+        ScrollView sc = new ScrollView(this);
+        sc.addView(log);
+        chatPanel.addView(sc, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        chatIn = new EditText(this);
+        chatIn.setHint("跟它说点什么…");
+        chatIn.setTextSize(13);
+        chatIn.setMaxLines(1);
+        chatIn.setTextColor(Color.parseColor("#111111"));
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(chatIn, ip);
+        TextView send = new TextView(this);
+        send.setText("发送");
+        send.setTextSize(13);
+        send.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        send.setTextColor(Color.parseColor("#111111"));
+        send.setGravity(Gravity.CENTER);
+        send.setPadding(dp(14), dp(10), dp(14), dp(10));
+        GradientDrawable sb = new GradientDrawable();
+        sb.setColor(Color.WHITE);
+        sb.setCornerRadius(dp(10));
+        sb.setStroke(dp(2), Color.parseColor("#111111"));
+        send.setBackground(sb);
+        send.setOnClickListener(v -> {
+            String s = chatIn.getText().toString().trim();
+            if (s.isEmpty()) return;
+            chatIn.setText("");
+            userChat(s);
+            refreshChatLog();
+        });
+        row.addView(send);
+        chatPanel.addView(row);
+
+        chatLP = new WindowManager.LayoutParams(
+                (int) (screenW * 0.78f), (int) (screenH * 0.55f),
+                overlayType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,   // 让输入框能拿焦点弹键盘
+                PixelFormat.TRANSLUCENT);
+        chatLP.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
+        try { wm.addView(chatPanel, chatLP); } catch (Exception ignored) {}
+        chatPanel.setVisibility(View.GONE);
+    }
+
+    private TextView chatLogView;
+
+    private void refreshChatLog() {
+        if (chatLogView == null) return;
+        chatLogView.setText(chatLogText().isEmpty() ? "（还没聊过天）" : chatLogText());
+    }
+
+    /** 聊天框顶部状态行：时间时段 + 前台 App 名 */
+    private void refreshChatStatus() {
+        if (chatStatus == null) return;
+        String[] p = timePeriod();
+        String app = currentAppLabel();
+        String appTxt = (app == null)
+                ? "（App 感知未生效：去设置页开"App感知"并授"使用情况访问权限"）"
+                : "当前应用：" + app;
+        chatStatus.setText("🕐 " + p[0] + "　·　" + appTxt);
+    }
+
+    /** 感知开关（设置页用） */
+    public void setAppSense(boolean on) {
+        DataStore.putBool("appSense", on);
+    }
 
     // ---------------- 阶段5：整蛊模式开关（设置页调用） ----------------
 
@@ -1591,7 +1829,10 @@ public class PetService extends Service implements Flyer.Host {
                             .put("content", "【当前情景】" + situation + "\n【当前设备】用户手机\n【好感度】" + DataStore.getAff()
                                     + "（" + DataStore.titleFor(DataStore.getAff()) + "）\n【情绪】" + emo.describe()
                                     + "\n【饲养】" + feedStatusText() + "\n【饲养天数】第 " + daysCount() + " 天"
+                                    + "\n【当前时间】" + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(new Date())
+                                    + "（" + timePeriod()[0] + "）"
                                     + (DataStore.sp().getString("weatherCache", "").isEmpty() ? "" : "\n【今日天气】" + DataStore.sp().getString("weatherCache", ""))
+                                    + "\n【前台应用】" + (currentAppLabel() == null ? "未知（无权限）" : currentAppLabel())
                                     + "\n\n请用你的口吻回应，两句话以内，不要客套。"));
             // 短期记忆：最近 10 轮对话注入（保持因果顺序）
             java.util.List<String> hist;
@@ -1661,7 +1902,7 @@ public class PetService extends Service implements Flyer.Host {
         instance = null;
         handler.removeCallbacksAndMessages(null);
         emo.save();
-        for (View v : new View[]{pet, bubble}) {
+        for (View v : new View[]{pet, bubble, tabHandle, chatPanel}) {
             if (v != null) try { wm.removeView(v); } catch (Exception ignored) {}
         }
         super.onDestroy();

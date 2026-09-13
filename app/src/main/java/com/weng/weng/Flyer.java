@@ -26,6 +26,8 @@ public class Flyer {
 
         float speedMul();
 
+        float glideFriction();
+
         Random rnd();
 
         Handler handler();
@@ -67,6 +69,14 @@ public class Flyer {
         dir = h.rnd().nextBoolean() ? 1 : -1;
     }
 
+    /** 甩动惯性：以松手速度继续滑行，按 Host.glideFriction() 衰减 */
+    public void glide(float vx0, float vy0) {
+        state = "glide";
+        vx = vx0;
+        vy = vy0;
+        stateTimer = 999999;
+    }
+
     private void clampPos() {
         float w = h.screenW() - h.size();
         float hh = h.screenH() - h.size() - 60;
@@ -85,6 +95,24 @@ public class Flyer {
         Random r = h.rnd();
         float m = h.speedMul();
         switch (state) {
+            case "glide": {
+                // 惯性滑行：速度按摩擦系数衰减，撞边反弹打折
+                float f = h.glideFriction();
+                x += vx;
+                y += vy;
+                vx *= f;
+                vy *= f;
+                h.setPos(x, y);
+                if (x < 0) { h.setPos(0, y); vx = -vx * 0.5f; }
+                if (x > W - h.size()) { h.setPos(W - h.size(), y); vx = -vx * 0.5f; }
+                if (y < 40) { h.setPos(x, 40); vy = -vy * 0.5f; }
+                if (y > H) { h.setPos(x, H); vy = -vy * 0.5f; }
+                if (Math.abs(vx) < 0.15f && Math.abs(vy) < 0.15f) {
+                    switchTo("cruise", 0);
+                    randomizeVelocity();
+                }
+                return true;
+            }
             case "cruise":
                 x += vx * m;
                 y += vy * m;
