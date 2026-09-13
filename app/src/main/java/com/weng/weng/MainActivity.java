@@ -16,6 +16,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        CrashGuard.install(this);
         grantedOnEntry = Settings.canDrawOverlays(this);
         if (grantedOnEntry) {
             startPetAndOpenSettings();
