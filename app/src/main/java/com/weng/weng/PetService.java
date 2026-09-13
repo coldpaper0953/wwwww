@@ -251,6 +251,9 @@ public class PetService extends Service implements Flyer.Host {
         handler.postDelayed(this::autoStateTick, 12000);
         handler.postDelayed(this::afkTick, 30000);
         handler.postDelayed(this::reminderTick, 60000);   // 喝水/久坐/DDL/整点报时
+        handler.postDelayed(this::weatherTick, 3000);     // 每日天气播报（3s 后首查）
+        handler.postDelayed(this::idleChatTick, 90000);   // 主动搭话
+        handler.postDelayed(this::appSenseTick, 25000);   // 前台应用感知/会议勿扰
     }
 
     // ---------------- 版本检查 + 热更新 ----------------
@@ -785,7 +788,7 @@ public class PetService extends Service implements Flyer.Host {
         wm.addView(bubble, bubbleLP);
     }
 
-    private void showBubble(String text, long ms) {
+    public void showBubble(String text, long ms) {
         lastBubbleAt = System.currentTimeMillis();
         bubble.setText(text);
         bubble.setVisibility(View.VISIBLE);
@@ -981,14 +984,200 @@ public class PetService extends Service implements Flyer.Host {
 
     /** 专注完成：黄色高光连闪三下 */
     private void flashGlow() {
-        pet.setColorFilter(android.graphics.PorterDuffColorFilter.YELLOW);
+        final android.graphics.PorterDuffColorFilter yellow =
+                new android.graphics.PorterDuffColorFilter(Color.YELLOW, android.graphics.PorterDuff.Mode.SRC_ATOP);
+        pet.setColorFilter(yellow);
         for (int i = 1; i <= 3; i++) {
             handler.postDelayed(() -> {
                 if (pet.getColorFilter() != null) pet.setColorFilter(null);
-                else pet.setColorFilter(android.graphics.PorterDuffColorFilter.YELLOW);
+                else pet.setColorFilter(yellow);
             }, i * 500L);
         }
         handler.postDelayed(() -> pet.setColorFilter(null), 3500);
+    }
+
+    // ---------------- 阶段3：天气 / 主动搭话 / App 感知 ----------------
+
+    /** 天气：wttr.in 免 Key。启动 3s 首查、当天只播一次；之后每 2h 静默刷新缓存 */
+    private void weatherTick() {
+        String today = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(new Date());
+        boolean first = !today.equals(DataStore.sp().getString("weatherDay", ""));
+        handler.postDelayed(this::weatherTick, 2 * 3600000L);
+        new Thread(() -> {
+            String w = fetchWeather();
+            if (w == null) {
+                if (first) handler.post(() -> showBubble("没查到今天的天气～" + Planner.openCount() + " 个待办还等着你哦", 5000));
+                return;
+            }
+            DataStore.sp().edit().putString("weatherCache", w).putString("weatherDay", today).apply();
+            if (first) {
+                handler.post(() -> {
+                    showBubble("☀️ 今日天气：" + w, 8000);
+                    // 顺带催办
+                    if (Planner.openCount() > 0) {
+                        handler.postDelayed(() -> showBubble("还有 " + Planner.openCount() + " 个待办没完成，今天的水喝了 " + Planner.waterToday() + "/8 杯～", 5000), 8500);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /** 拉 wttr.in（格式 ?format=描述|气温|体感|湿度|降雨%） */
+    private String fetchWeather() {
+        try {
+            String city = DataStore.sp().getString("weatherCity", "");
+            String u = "https://wttr.in/" + (city.isEmpty() ? "?format=%C|%t|%f|%h|%p&lang=zh" : java.net.URLEncoder.encode(city, "UTF-8") + "?format=%C|%t|%f|%h|%p&lang=zh");
+            HttpURLConnection c = (HttpURLConnection) new URL(u).openConnection();
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(20000);
+            c.setRequestProperty("User-Agent", "curl/8.0");
+            InputStream is = c.getResponseCode() < 400 ? c.getInputStream() : c.getErrorStream();
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while (is != null && (n = is.read(buf)) > 0) bos.write(buf, 0, n);
+            if (is != null) is.close();
+            if (c.getResponseCode() != 200) return null;
+            String[] p = bos.toString("UTF-8").trim().split("\\|");
+            if (p.length < 3) return null;
+            String tips = "";
+            try {
+                int temp = Integer.parseInt(p[1].replaceAll("[^0-9-]", ""));
+                if (temp >= 30) tips = "，多喝水！";
+                else if (temp <= 5) tips = "，多穿点！";
+                int rain = Integer.parseInt(p[4].replaceAll("[^0-9]", ""));
+                if (rain >= 50) tips += " 记得带伞☔";
+            } catch (Exception ignored) {
+            }
+            return p[0] + " " + p[1] + "（体感 " + p[2] + "，湿度 " + p[3] + "）" + tips;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 主动搭话：90s 轮询，冷却 = AI 说话间隔设置（默认 45s），60% 吐槽屏幕/40% 话题库 */
+    private void idleChatTick() {
+        handler.postDelayed(this::idleChatTick, 90000);
+        if (dnd || napping || dead || workMode || pending) return;
+        if (System.currentTimeMillis() - Math.max(lastAiAt, lastInteractAt) < 45000) return;
+        String app = currentAppLabel();
+        boolean talkApp = rnd.nextInt(100) < 60 && app != null;
+        String topic = talkApp ? "（用户正在用 " + app + "，随口吐槽或调侃一句，要短）"
+                : randomTopic();
+        if (topic == null) return;
+        aiChat("主动搭话：" + topic);
+    }
+
+    private String lastTopic = null;
+
+    private String randomTopic() {
+        String[] topics = {
+                "求摸摸：蹭到用户手边讨摸摸",
+                "催喝水：提醒用户今天喝水了没",
+                "炫耀：吹嘘自己刚才一个俯冲躲过了什么",
+                "编一条蚊子冷知识讲给用户听",
+                "问用户午饭打算吃什么",
+                "抱怨手机屏幕太亮晃眼睛",
+                "夸用户今天看起来状态不错",
+                "好奇地问问用户在忙什么",
+                "宣布自己要开始绕圈圈锻炼了",
+                "问用户喜不喜欢下雨天的味道",
+                "模仿手机通知声吓用户一跳",
+                "感叹一下今天飞了多少圈",
+                "提议用户起来伸个懒腰",
+                "想听听用户今天遇到的开心事",
+                "抱怨自己差点被风扇吹跑",
+                "问用户觉得蚊子算不算最可爱的宠物",
+                "宣布要给用户表演一个后空翻（虽然不会）"
+        };
+        String t = topics[rnd.nextInt(topics.length)];
+        if (t.equals(lastTopic)) t = topics[(topics.length > 1) ? (rnd.nextInt(topics.length)) : 0];
+        lastTopic = t;
+        return t;
+    }
+
+    /** 前台应用感知：25s 轮询。会议 App→自动勿扰；娱乐/办公类→概率吐槽 */
+    private void appSenseTick() {
+        handler.postDelayed(this::appSenseTick, 25000);
+        if (dead || napping) return;
+        String app = currentAppLabel();
+        if (app == null) return;
+        String appKey = appKeyOf(app);
+        // 会议自动勿扰
+        boolean meeting = appKeyOf(app).equals("会议");
+        if (meeting && !dnd && !DataStore.getBool("autoDndOn", false)) {
+            DataStore.putBool("autoDndOn", true);
+            toggleDnd();   // 开勿扰（内部会播"开会呢"）
+            return;
+        }
+        if (!meeting && DataStore.getBool("autoDndOn", false)) {
+            DataStore.putBool("autoDndOn", false);
+            if (dnd) toggleDnd();   // 散会恢复
+            return;
+        }
+        if (dnd) return;
+        // 冷却 20 分钟 + 概率 40%
+        long now = System.currentTimeMillis();
+        String k = "appsense_" + appKey;
+        if (now - DataStore.getLong(k, 0) < 1200000L) return;
+        if (rnd.nextInt(100) >= 40) return;
+        DataStore.putLong(k, now);
+        String line = appSenseLine(appKey);
+        if (line == null) return;
+        showBubble(line, 4500);
+        if (appKey.equals("音乐")) fly.switchTo("butterfly", 200);
+    }
+
+    /** 拿前台应用标签（无障碍拿不到，用 UsageStatsManager 最近事件近似；无权限返回 null） */
+    private String currentAppLabel() {
+        try {
+            android.app.usage.UsageStatsManager usm = (android.app.usage.UsageStatsManager) getSystemService(USAGE_STATS_SERVICE);
+            long now = System.currentTimeMillis();
+            java.util.List<android.app.usage.UsageStats> l = usm.queryUsageStats(android.app.usage.UsageStatsManager.INTERVAL_DAILY, now - 60000L, now);
+            if (l == null || l.isEmpty()) return null;
+            android.app.usage.UsageStats top = null;
+            for (android.app.usage.UsageStats s : l) {
+                if (top == null || s.getLastTimeUsed() > top.getLastTimeUsed()) top = s;
+            }
+            if (top == null || top.getLastTimeUsed() < now - 120000L) return null;
+            String pkg = top.getPackageName();
+            String nm = getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(pkg, 0)).toString();
+            return nm;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 应用归类（对应电脑版 APP_KEYWORDS 六类+音乐+会议） */
+    private String appKeyOf(String name) {
+        String n = name == null ? "" : name;
+        if (containsAny(n, "会议", "腾讯会议", "Zoom", "Teams", "Webex", "钉钉", "飞书")) return "会议";
+        if (containsAny(n, "Word", "Excel", "PPT", "WPS", "办公", "文档", "笔记", "Notion", "备忘")) return "办公";
+        if (containsAny(n, "哔哩", "B站", "bilibili", "抖音", "快手", "YouTube", "优酷", "爱奇艺", "腾讯视频", "芒果")) return "视频";
+        if (containsAny(n, "微信", "QQ", "钉钉", "飞书", "Telegram", "WhatsApp", "微博", "小红书")) return "聊天";
+        if (containsAny(n, "网易云", "QQ音乐", "音乐", "Spotify", "酷狗", "酷我", "汽水")) return "音乐";
+        if (containsAny(n, "游戏", "原神", "王者", "和平精英", "Steam", "蛋仔", "元梦", "金铲铲", "崩坏")) return "游戏";
+        if (containsAny(n, "浏览器", "Chrome", "Edge", "夸克", "UC", "百度", "知乎", "淘宝", "京东", "拼多多", "支付宝")) return "购物浏览";
+        return "其他";
+    }
+
+    private boolean containsAny(String s, String... kws) {
+        for (String k : kws) if (s.contains(k)) return true;
+        return false;
+    }
+
+    private String appSenseLine(String key) {
+        String[] pool;
+        switch (key) {
+            case "办公": pool = new String[]{"又在弄表格文档？记得随手保存！", "工作工作，你的老板知道你这么努力吗～"}; break;
+            case "视频": pool = new String[]{"老板！这里有人摸鱼看视频！", "看完这集就去干活哦～"}; break;
+            case "聊天": pool = new String[]{"又在偷偷跟谁聊天呢？", "聊什么呢聊这么开心～"}; break;
+            case "游戏": pool = new String[]{"作业/工作写完了吗就打游戏？", "带我一个！我当飞行单位！"}; break;
+            case "音乐": pool = new String[]{"🎵 跟着节奏动起来～"}; break;
+            case "购物浏览": pool = new String[]{"又剁手了？蚊子我吃土就行", "逛逛逛，钱包还好吗～"}; break;
+            default: return null;
+        }
+        return pool[rnd.nextInt(pool.length)];
     }
 
     // ---------------- Flyer.Host 实现 ----------------
@@ -1274,7 +1463,7 @@ public class PetService extends Service implements Flyer.Host {
 
     // ---------------- AI 对话（原生转发，无 CORS 问题） ----------------
 
-    private void aiChat(String situation) {
+    public void aiChat(String situation) {
         if (pending) return;
         pending = true;
         lastAiAt = System.currentTimeMillis();
@@ -1284,12 +1473,28 @@ public class PetService extends Service implements Flyer.Host {
             JSONObject o = new JSONObject();
             o.put("model", apiModel);
             o.put("temperature", 0.85);
-            o.put("messages", new org.json.JSONArray()
+            org.json.JSONArray msgs = new org.json.JSONArray()
                     .put(new JSONObject().put("role", "system").put("content", persona()))
                     .put(new JSONObject().put("role", "user")
                             .put("content", "【当前情景】" + situation + "\n【当前设备】用户手机\n【好感度】" + DataStore.getAff()
                                     + "（" + DataStore.titleFor(DataStore.getAff()) + "）\n【情绪】" + emo.describe()
-                                    + "\n【饲养】" + feedStatusText() + "\n【饲养天数】第 " + daysCount() + " 天")));
+                                    + "\n【饲养】" + feedStatusText() + "\n【饲养天数】第 " + daysCount() + " 天"
+                                    + (DataStore.sp().getString("weatherCache", "").isEmpty() ? "" : "\n【今日天气】" + DataStore.sp().getString("weatherCache", ""))
+                                    + "\n\n请用你的口吻回应，两句话以内，不要客套。"));
+            // 短期记忆：最近 10 轮对话注入（保持因果顺序）
+            java.util.List<String> hist;
+            synchronized (chatLog) {
+                hist = new java.util.ArrayList<String>(chatLog);
+            }
+            int start = Math.max(0, hist.size() - 20);
+            for (int i = start; i < hist.size(); i++) {
+                String line = hist.get(i);
+                String role = line.startsWith("你：") ? "user" : "assistant";
+                String content = line.startsWith("你：") ? line.substring(2) : line.substring(line.indexOf("：") + 1);
+                if (content.trim().isEmpty()) continue;
+                msgs.put(new JSONObject().put("role", role).put("content", content));
+            }
+            o.put("messages", msgs);
             body = o.toString();
         } catch (Exception e) {
             pending = false;
