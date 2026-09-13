@@ -166,7 +166,7 @@ public class PetService extends Service {
                     float ux = ev.getRawX(), uy = ev.getRawY();
                     long dur = System.currentTimeMillis() - downAt;
                     float dist = (float) Math.hypot(ux - downX, uy - downY);
-                    if (petted || dead) return true;
+                    if (petted || dead || dragged) return true;
                     if (dist > 60) {                      // 扔出去
                         state = "falling";
                         showBubble(pick("哎呀！", "你干什么！", "喂——"), 1500);
