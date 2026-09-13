@@ -250,6 +250,7 @@ public class PetService extends Service implements Flyer.Host {
         handler.postDelayed(this::moodTick, 60000);
         handler.postDelayed(this::autoStateTick, 12000);
         handler.postDelayed(this::afkTick, 30000);
+        handler.postDelayed(this::reminderTick, 60000);   // 喝水/久坐/DDL/整点报时
     }
 
     // ---------------- 版本检查 + 热更新 ----------------
@@ -952,6 +953,44 @@ public class PetService extends Service implements Flyer.Host {
         }
     }
 
+    /** 60s：提醒轮询（喝水/久坐/DDL/整点报时）+ 专注到点结算 */
+    private void reminderTick() {
+        handler.postDelayed(this::reminderTick, 60000);
+        // 专注结算优先
+        org.json.JSONObject f = Planner.focus();
+        if (f.optBoolean("active", false)) {
+            if (Planner.focusTick()) {
+                String msg = Planner.finishFocus();
+                awardAff(10);
+                DataStore.setBlood(Math.min(100f, DataStore.getBlood() + 15));
+                emo.add("兴奋", 8);
+                showBubble(msg + " +10 好感 +15 血池", 5000);
+                aiChat("用户完成了一场 " + f.optInt("targetMin", 25) + " 分钟的专注，为他庆祝");
+                // 身体闪三下黄光
+                flashGlow();
+                return;
+            }
+        }
+        if (dnd || napping || dead) return;
+        String msg = Planner.pollReminders();
+        if (msg != null) {
+            showBubble(msg, 6000);
+            fly.switchTo("dash", 30);
+        }
+    }
+
+    /** 专注完成：黄色高光连闪三下 */
+    private void flashGlow() {
+        pet.setColorFilter(android.graphics.PorterDuffColorFilter.YELLOW);
+        for (int i = 1; i <= 3; i++) {
+            handler.postDelayed(() -> {
+                if (pet.getColorFilter() != null) pet.setColorFilter(null);
+                else pet.setColorFilter(android.graphics.PorterDuffColorFilter.YELLOW);
+            }, i * 500L);
+        }
+        handler.postDelayed(() -> pet.setColorFilter(null), 3500);
+    }
+
     // ---------------- Flyer.Host 实现 ----------------
 
     @Override
@@ -985,6 +1024,12 @@ public class PetService extends Service implements Flyer.Host {
 
     public void openSettings() {
         Intent i = new Intent(this, SettingsActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(i);
+    }
+
+    public void openPlanner() {
+        Intent i = new Intent(this, PlannerActivity.class);
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         startActivity(i);
     }

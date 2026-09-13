@@ -2,6 +2,7 @@ package com.weng.weng;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -92,6 +93,12 @@ public class SettingsActivity extends Activity {
         row.addView(send);
         chatCard.addView(row);
         root.addView(chatCard);
+        root.addView(gap(8));
+
+        // 手账入口
+        TextView plannerBtn = button("📝 我的手账（待办/习惯/喝水/专注/随手记）");
+        plannerBtn.setOnClickListener(v -> startActivity(new Intent(this, PlannerActivity.class)));
+        root.addView(plannerBtn);
         root.addView(gap(10));
 
         // ============ 宠物设置卡片 ============

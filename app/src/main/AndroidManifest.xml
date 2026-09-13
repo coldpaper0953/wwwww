@@ -36,6 +36,11 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <activity
+            android:name=".PlannerActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <service
             android:name=".PetService"
             android:exported="false"
