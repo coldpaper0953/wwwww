@@ -240,6 +240,39 @@ public class SettingsActivity extends Activity {
         root.addView(apiCard);
         root.addView(gap(10));
 
+        // ============ 更多玩法卡片 ============
+        root.addView(cardLabel("🎮 更多玩法"));
+        LinearLayout exCard = card();
+        LinearLayout exRow = new LinearLayout(this);
+        exRow.setOrientation(LinearLayout.HORIZONTAL);
+        TextView fortune = button("🔮 今日运势");
+        fortune.setOnClickListener(v ->
+                Toast.makeText(this, com.weng.weng.Extras.fortune(), Toast.LENGTH_LONG).show());
+        exRow.addView(fortune);
+        exRow.addView(gapW(8));
+        TextView guide = button("📖 饲养指南");
+        guide.setOnClickListener(v ->
+                new AlertDialog.Builder(this).setTitle("📖 饲养指南")
+                        .setMessage(com.weng.weng.Extras.guideText()).setPositiveButton("懂了", null).show());
+        exRow.addView(guide);
+        exCard.addView(exRow);
+        exCard.addView(gap(8));
+        LinearLayout exRow2 = new LinearLayout(this);
+        exRow2.setOrientation(LinearLayout.HORIZONTAL);
+        TextView ach = button("🏆 成就/回忆录");
+        ach.setOnClickListener(v -> showAchievements());
+        exRow2.addView(ach);
+        exRow2.addView(gapW(8));
+        TextView resetTut = button("🔁 重置教程");
+        resetTut.setOnClickListener(v -> {
+            com.weng.weng.DataStore.putBool("tutorialDone", false);
+            Toast.makeText(this, "下次启动会重新播放教程", Toast.LENGTH_SHORT).show();
+        });
+        exRow2.addView(resetTut);
+        exCard.addView(exRow2);
+        root.addView(exCard);
+        root.addView(gap(10));
+
         // ============ 更新与关于卡片 ============
         root.addView(cardLabel("⚙️ 更新与关于"));
         LinearLayout aboutCard = card();
@@ -362,6 +395,44 @@ public class SettingsActivity extends Activity {
                 .setView(box)
                 .setNegativeButton("取消", null)
                 .show();
+    }
+
+    /** 成就墙 + 剧情回忆录弹窗 */
+    private void showAchievements() {
+        StringBuilder sb = new StringBuilder("—— 已解锁 ——\n");
+        boolean any = false;
+        for (String[] a : com.weng.weng.Extras.ACHIEVEMENTS) {
+            boolean got;
+            switch (a[0]) {
+                case "灵魂契约 💖": got = com.weng.weng.DataStore.getBool("ach_soul", false); break;
+                case "自律达人 📅": got = com.weng.weng.DataStore.getBool("ach_streak", false); break;
+                case "血祭之王 🩸": got = com.weng.weng.DataStore.getBool("ach_blood", false); break;
+                case "专注大师 🍅": got = com.weng.weng.DataStore.getBool("ach_focus", false); break;
+                case "水润少年 💧": got = com.weng.weng.DataStore.getBool("ach_water", false); break;
+                case "话痨之友 💬": got = com.weng.weng.DataStore.getBool("ach_talk", false); break;
+                default: got = false;
+            }
+            if (got) {
+                sb.append("🏆 ").append(a[0]).append("　").append(a[1]).append('\n');
+                any = true;
+            }
+        }
+        if (!any) sb.append("（还没有，快去解锁！）\n");
+        sb.append("\n—— 剧情回忆录 ——\n");
+        java.util.List<org.json.JSONObject> log = com.weng.weng.DataStore.arr("theaterLog");
+        if (log.isEmpty()) sb.append("（还没有小剧场记录）");
+        else {
+            int from = Math.max(0, log.size() - 10);
+            for (int i = log.size() - 1; i >= from; i--) {
+                org.json.JSONObject o = log.get(i);
+                sb.append('·').append(o.optString("t", "")).append(' ')
+                        .append(o.optString("choice", "")).append("（好感 ")
+                        .append(o.optInt("delta", 0) >= 0 ? "+" : "").append(o.optInt("delta", 0)).append("）\n");
+            }
+        }
+        sb.append("\n—— 心情走势 ——\n").append(com.weng.weng.Emotion.chart());
+        new AlertDialog.Builder(this).setTitle("🏆 成就与回忆").setMessage(sb.toString())
+                .setPositiveButton("关闭", null).show();
     }
 
     private EditText apiInput(String hint, String text) {

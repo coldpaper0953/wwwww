@@ -31,6 +31,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.Random;
 /** 悬浮窗蚊子宠物：形态与电脑版一致（飞在一切界面之上），功能开关做成悬浮面板 */
 public class PetService extends Service implements Flyer.Host {
@@ -244,8 +245,6 @@ public class PetService extends Service implements Flyer.Host {
         randomizeVelocity();
         handler.post(tickMove);
         handler.post(tickFrame);
-        handler.postDelayed(this::firstGreeting, 800);
-        handler.postDelayed(this::checkUpdate, 5000);
         handler.postDelayed(this::metaTick, 30000);
         handler.postDelayed(this::moodTick, 60000);
         handler.postDelayed(this::autoStateTick, 12000);
@@ -254,6 +253,14 @@ public class PetService extends Service implements Flyer.Host {
         handler.postDelayed(this::weatherTick, 3000);     // 每日天气播报（3s 后首查）
         handler.postDelayed(this::idleChatTick, 90000);   // 主动搭话
         handler.postDelayed(this::appSenseTick, 25000);   // 前台应用感知/会议勿扰
+        handler.postDelayed(this::extrasTick, 180000);     // 随机事件/小游戏/小剧场
+        handler.postDelayed(this::achieveTick, 120000);    // 成就检查
+        if (!DataStore.getBool("tutorialDone", false)) {
+            handler.postDelayed(this::playTutorial, 1500); // 首次教程
+        } else {
+            handler.postDelayed(this::firstGreeting, 800);
+        }
+        handler.postDelayed(this::checkUpdate, 5000);
     }
 
     // ---------------- 版本检查 + 热更新 ----------------
@@ -1180,6 +1187,69 @@ public class PetService extends Service implements Flyer.Host {
         return pool[rnd.nextInt(pool.length)];
     }
 
+    // ---------------- 阶段4：随机事件 / 小剧场 / 成就 / 教程 ----------------
+
+    /** 3 分钟轮询：随机事件 + 小游戏 + 小剧场（均带冷却与概率门） */
+    private void extrasTick() {
+        handler.postDelayed(this::extrasTick, 180000);
+        if (dnd || napping || dead || workMode || pending) return;
+        // 随机事件
+        String ev = Extras.randomEvent(rnd);
+        if (ev != null) {
+            showBubble(ev, 6000);
+            return;
+        }
+        // 小游戏
+        String[] game = Extras.miniGame(rnd);
+        if (game != null) {
+            showBubble("🎮 " + game[0] + "\n" + game[1], 9000);
+            return;
+        }
+        // 小剧场
+        String[] th = Extras.theater(rnd);
+        if (th != null) {
+            theaterDialog(th);
+        }
+        // 好感里程碑纪念小剧场（跨档 8 秒后）
+        String pending = DataStore.getPendingTheater();
+        if (!pending.isEmpty()) {
+            theaterDialog(new String[]{"好感度跨越 " + pending.replace("aff", "") + " 的纪念时刻！\n它想跟你玩个大的", "认真庆祝一下！", "低调路过…"});
+        }
+    }
+
+    /** 小剧场二选一弹窗（从 Service 弹需 FLAG_ACTIVITY_NEW_TASK） */
+    private void theaterDialog(String[] th) {
+        Intent i = new Intent(this, TheaterActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.putExtra("scene", th[0]);
+        i.putExtra("a", th[1]);
+        i.putExtra("b", th[2]);
+        startActivity(i);
+    }
+
+    /** 2 分钟：成就检查 */
+    private void achieveTick() {
+        handler.postDelayed(this::achieveTick, 120000);
+        String ach = Extras.checkAchievements();
+        if (ach != null) {
+            showBubble(ach, 6000);
+            emo.add("兴奋", 10);
+        }
+    }
+
+    /** 首次教程：7 步气泡序列 */
+    private void playTutorial() {
+        String[] steps = Extras.TUTORIAL;
+        for (int i = 0; i < steps.length; i++) {
+            final String t = steps[i];
+            handler.postDelayed(() -> showBubble(t, 4200), 800L + i * 5000L);
+        }
+        handler.postDelayed(() -> {
+            DataStore.putBool("tutorialDone", true);
+            showBubble("教程完啦！多多关照～嗡嗡嗡", 3000);
+        }, 800L + steps.length * 5000L);
+    }
+
     // ---------------- Flyer.Host 实现 ----------------
 
     @Override
@@ -1225,6 +1295,11 @@ public class PetService extends Service implements Flyer.Host {
 
     public void userChat(String text) {
         lastInteractAt = System.currentTimeMillis();
+        DataStore.putInt("talkCount", DataStore.getInt("talkCount", 0) + 1);
+        if (DataStore.getInt("talkCount", 0) >= 50 && !DataStore.getBool("ach_talk", false)) {
+            DataStore.putBool("ach_talk", true);
+            showBubble("🏆 解锁成就：话痨之友 💬", 5000);
+        }
         logChat("你", text);
         aiChat("用户对你说：" + text);
     }
