@@ -184,6 +184,9 @@ public class PetService extends Service {
     public static PetService instance;
     public volatile float speedMul = 1f;
     private int deadRes;
+    public String apiBase, apiKey, apiModel;
+    public boolean workMode = false;
+    public final java.util.Map<String, java.util.List<String>> quotes = new java.util.HashMap<String, java.util.List<String>>();
     private long firstAt = 0;
     private final java.util.List<String> chatLog = java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
     public int affection;
@@ -205,6 +208,8 @@ public class PetService extends Service {
         }
         affection = sp.getInt("aff", 0);
         speedMul = sp.getFloat("speedMul", 1f);
+        initApi();
+        loadQuotes();
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         DisplayMetrics dm = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(dm);
@@ -445,7 +450,7 @@ public class PetService extends Service {
                     if (petted || dead || dragged) return true;
                     if (dist > 60) {                      // 扔出去
                         state = "falling";
-                        showBubble(pick("哎呀！", "你干什么！", "喂——"), 1500);
+                        showBubble(q("throw"), 1500);
                     } else if (dur < 350) {               // 戳
                         long now = System.currentTimeMillis();
                         tapCount = (now - lastTapAt < 1200) ? tapCount + 1 : 1;
@@ -455,7 +460,7 @@ public class PetService extends Service {
                             smackDead();
                         } else {
                             playEmo(happyF, 1);
-                            showBubble(tapCount == 1 ? "嗯？" : pick("别闹…", "干嘛？", "戳啥呢"), 1800);
+                            showBubble(q("tap"), 1800);
                             addAffection(1);
                             aiChat("用户戳了你一下");
                         }
@@ -485,7 +490,7 @@ public class PetService extends Service {
         public void run() {
             handler.postDelayed(this, 30);
             if (dead) return;
-            if (state.equals("cruise") && !dragged && !dnd) {
+            if (state.equals("cruise") && !dragged && !dnd && !workMode) {
                 px += vx * speedMul;
                 py += vy * speedMul;
                 float oldVx = vx, oldVy = vy;
@@ -530,6 +535,11 @@ public class PetService extends Service {
                 return;
             }
             pet.setColorFilter(null);
+            if (workMode) {
+                frameIdx = (frameIdx + 1) % 5;
+                pet.setImageResource(workF[frameIdx]);
+                return;
+            }
             frameIdx = (frameIdx + 1) % 5;
             pet.setImageResource(cruiseF[frameIdx]);
         }
@@ -552,7 +562,7 @@ public class PetService extends Service {
         handler.postDelayed(() -> {
             dead = false;
             playEmo(sadF, 2);
-            showBubble("哼，我会复活的…你等着", 2500);
+            showBubble(q("revive"), 2500);
             aiChat("用户快速连点三下把你拍扁了，你复活后很委屈");
         }, 2000);
     }
@@ -666,9 +676,101 @@ public class PetService extends Service {
         sp.edit().putInt("aff", affection).apply();
     }
 
+    private void initApi() {
+        apiBase = sp.getString("apiBase", URL_API);
+        apiKey = sp.getString("apiKey", KEY_API);
+        apiModel = sp.getString("apiModel", MODEL);
+    }
+
+    public void setApi(String base, String key, String model) {
+        if (base != null && base.trim().length() > 0) apiBase = base.trim();
+        if (key != null && key.trim().length() > 0) apiKey = key.trim();
+        if (model != null && model.trim().length() > 0) apiModel = model.trim();
+        sp.edit().putString("apiBase", apiBase).putString("apiKey", apiKey).putString("apiModel", apiModel).apply();
+    }
+
+    private static final java.util.Map<String, String[]> DEFAULT_QUOTES = new java.util.HashMap<String, String[]>();
+
+    private void loadQuotes() {
+        DEFAULT_QUOTES.clear();
+        DEFAULT_QUOTES.put("tap", new String[]{"嗯？", "别闹…", "干嘛？", "戳啥呢"});
+        DEFAULT_QUOTES.put("throw", new String[]{"哎呀！", "你干什么！", "喂——"});
+        DEFAULT_QUOTES.put("revive", new String[]{"哼，我会复活的…你等着"});
+        DEFAULT_QUOTES.put("sleep", new String[]{"Zzz…", "好困…", "抱着挺舒服…"});
+        DEFAULT_QUOTES.put("fallback", new String[]{"嗡～信号不太好，等会儿再聊", "（信号弱）先自己玩会儿…", "嗡嗡…听不清，再说一遍？"});
+        DEFAULT_QUOTES.put("work_on", new String[]{"好嘞，进入工作状态！"});
+        DEFAULT_QUOTES.put("work_off", new String[]{"下班啦！"});
+        for (String k : DEFAULT_QUOTES.keySet()) {
+            java.util.List<String> l = new java.util.ArrayList<String>();
+            for (String s : DEFAULT_QUOTES.get(k)) l.add(s);
+            quotes.put(k, l);
+        }
+        String saved = sp.getString("quotes", null);
+        if (saved == null) return;
+        try {
+            JSONObject o = new JSONObject(saved);
+            java.util.Iterator<String> it = o.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                org.json.JSONArray arr = o.getJSONArray(k);
+                java.util.List<String> l = new java.util.ArrayList<String>();
+                for (int i = 0; i < arr.length(); i++) {
+                    String s = arr.getString(i).trim();
+                    if (s.length() > 0) l.add(s);
+                }
+                if (!l.isEmpty()) quotes.put(k, l);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    public void saveQuoteGroup(String key, java.util.List<String> lines) {
+        if (lines == null || lines.isEmpty()) return;
+        quotes.put(key, lines);
+        JSONObject o = new JSONObject();
+        for (java.util.Map.Entry<String, java.util.List<String>> e : quotes.entrySet()) {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (String s : e.getValue()) arr.put(s);
+            try { o.put(e.getKey(), arr); } catch (Exception ignored) {}
+        }
+        sp.edit().putString("quotes", o.toString()).apply();
+    }
+
+    public String q(String key) {
+        java.util.List<String> l = quotes.get(key);
+        if (l == null || l.isEmpty()) return "嗡？";
+        return l.get(rnd.nextInt(l.size()));
+    }
+
+    public void toggleWork() {
+        workMode = !workMode;
+        if (workMode) {
+            state = "work";
+            showBubble(q("work_on"), 2000);
+        } else {
+            state = "cruise";
+            randomizeVelocity();
+            showBubble(q("work_off"), 2000);
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        try {
+            DisplayMetrics dm = new DisplayMetrics();
+            wm.getDefaultDisplay().getRealMetrics(dm);
+            screenW = dm.widthPixels;
+            screenH = dm.heightPixels;
+            clampPet();
+            petLP.x = (int) px;
+            petLP.y = (int) py;
+            wm.updateViewLayout(pet, petLP);
+        } catch (Exception ignored) {}
+    }
+
     public void toggleDnd() {
         dnd = !dnd;
-        showBubble(dnd ? "好困…我睡一会儿，你别吵" : "睡饱啦！继续飞～", 2000);
+        showBubble(dnd ? q("sleep") : "睡饱啦！继续飞～", 2000);
     }
 
     public int daysCount() {
@@ -711,7 +813,7 @@ public class PetService extends Service {
         final String body;
         try {
             JSONObject o = new JSONObject();
-            o.put("model", MODEL);
+            o.put("model", apiModel);
             o.put("temperature", 0.85);
             o.put("messages", new org.json.JSONArray()
                     .put(new JSONObject().put("role", "system").put("content", persona()))
@@ -725,10 +827,10 @@ public class PetService extends Service {
         new Thread(() -> {
             String reply = null;
             try {
-                HttpURLConnection c = (HttpURLConnection) new URL(URL_API).openConnection();
+                HttpURLConnection c = (HttpURLConnection) new URL(apiBase).openConnection();
                 c.setRequestMethod("POST");
                 c.setRequestProperty("Content-Type", "application/json");
-                c.setRequestProperty("Authorization", "Bearer " + KEY_API);
+                c.setRequestProperty("Authorization", "Bearer " + apiKey);
                 c.setDoOutput(true);
                 c.setConnectTimeout(20000);
                 c.setReadTimeout(90000);
@@ -752,10 +854,10 @@ public class PetService extends Service {
                 }
             } catch (Exception ignored) {}
             final String fReply = reply;
-            logChat("蚊", fReply == null ? pick(FALLBACK) : fReply);
+            logChat("蚊", fReply == null ? q("fallback") : fReply);
             handler.post(() -> {
                 pending = false;
-                if (fReply == null) showBubble(pick(FALLBACK), 3000);
+                if (fReply == null) showBubble(q("fallback"), 3000);
                 else showBubble(fReply, 6000);
             });
         }).start();
