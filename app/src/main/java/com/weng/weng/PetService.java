@@ -546,7 +546,7 @@ public class PetService extends Service implements Flyer.Host {
                                 showBubble(q("throw"), 1500);
                             } else if (speed > 1.2f) {                // 惯性滑行
                                 fly.glide(dragVx, dragVy);
-                                if (speed > 8f) showBubble("woooo～惯性滑翔！", 1500);
+                                if (speed > 8f) showBubble(Quotes.pick("glide", rnd), 1500);
                             } else {
                                 fly.switchTo("cruise", 0);            // 慢放：原地恢复巡航
                             }
@@ -603,6 +603,16 @@ public class PetService extends Service implements Flyer.Host {
 
     public int curSize() { return (int) (PET_SIZE * petScale); }
 
+    /** 设置页滑块调大小（px 32-256） */
+    public void setSizeByPx(int px) {
+        petScale = Math.max(0.33f, Math.min(2.67f, px / 96f));
+        applyPetSize();
+    }
+
+    public void saveSizeNow() {
+        DataStore.putFloat("petScale", petScale);
+    }
+
     private void applyPetSize() {
         petLP.width = curSize();
         petLP.height = curSize();
@@ -616,7 +626,7 @@ public class PetService extends Service implements Flyer.Host {
         affection = DataStore.getAff();
         int ms = DataStore.milestoneCrossed(prev, affection);
         if (ms > 0) {
-            showBubble("✨ 好感 " + ms + " 里程碑达成！称号：" + DataStore.titleFor(affection), 5000);
+            showBubble(Quotes.pick("milestone", rnd, String.valueOf(ms), DataStore.titleFor(affection), null), 5000);
             DataStore.setPendingTheater("aff" + ms);
             aiChat("你和蚊子的好感度刚刚突破 " + ms + "，跨入「" + DataStore.titleFor(affection) + "」阶段，它很感动");
         }
@@ -911,12 +921,12 @@ public class PetService extends Service implements Flyer.Host {
         DataStore.setBlood(Math.min(100f, blood));
         // 吃撑打嗝
         if (System.currentTimeMillis() < DataStore.getStuffedUntil() && rnd.nextInt(100) < 25) {
-            showBubble("呃……嗝……撑死了……", 2000);
+            showBubble(Quotes.pick("stuffed", rnd), 2000);
             if (fly.state.equals("cruise")) fly.switchTo("drift", 150);
         }
         // 饥饿催血
         if (sat < 35 && !dnd && !dead && rnd.nextInt(100) < 40) {
-            showBubble(sat < 15 ? "😩 饿扁了…快献血啦…" : "🍽️ 有点饿了，献血吗？", 3500);
+            showBubble(Quotes.pick("hungry", rnd), 3500);
             if (fly.state.equals("cruise")) fly.switchTo("sleepy", 200);
         }
         // 起床气/小睡结束
@@ -1127,31 +1137,14 @@ public class PetService extends Service implements Flyer.Host {
     private String lastTopic = null;
 
     private String randomTopic() {
-        String[] topics = {
-                "求摸摸：蹭到用户手边讨摸摸",
-                "催喝水：提醒用户今天喝水了没",
-                "炫耀：吹嘘自己刚才一个俯冲躲过了什么",
-                "编一条蚊子冷知识讲给用户听",
-                "问用户午饭打算吃什么",
-                "抱怨手机屏幕太亮晃眼睛",
-                "夸用户今天看起来状态不错",
-                "好奇地问问用户在忙什么",
-                "宣布自己要开始绕圈圈锻炼了",
-                "问用户喜不喜欢下雨天的味道",
-                "模仿手机通知声吓用户一跳",
-                "感叹一下今天飞了多少圈",
-                "提议用户起来伸个懒腰",
-                "想听听用户今天遇到的开心事",
-                "抱怨自己差点被风扇吹跑",
-                "问用户觉得蚊子算不算最可爱的宠物",
-                "宣布要给用户表演一个后空翻（虽然不会）"
-        };
-        String t = topics[rnd.nextInt(topics.length)];
-        if (t.equals(lastTopic)) t = topics[(topics.length > 1) ? (rnd.nextInt(topics.length)) : 0];
+        java.util.List<String> ts = Quotes.get("topics");
+        if (ts.isEmpty()) return null;
+        String t = ts.get(rnd.nextInt(ts.size()));
+        if (t.equals(lastTopic) && ts.size() > 1) t = ts.get(rnd.nextInt(ts.size()));
         lastTopic = t;
         return t;
     }
-
+    
     /** 前台应用感知：25s 轮询。会议 App→自动勿扰；娱乐/办公类→概率吐槽 */
     private void appSenseTick() {
         handler.postDelayed(this::appSenseTick, 25000);
@@ -1230,19 +1223,15 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     private String appSenseLine(String key) {
-        String[] pool;
-        switch (key) {
-            case "办公": pool = new String[]{"又在弄表格文档？记得随手保存！", "工作工作，你的老板知道你这么努力吗～"}; break;
-            case "视频": pool = new String[]{"老板！这里有人摸鱼看视频！", "看完这集就去干活哦～"}; break;
-            case "聊天": pool = new String[]{"又在偷偷跟谁聊天呢？", "聊什么呢聊这么开心～"}; break;
-            case "游戏": pool = new String[]{"作业/工作写完了吗就打游戏？", "带我一个！我当飞行单位！"}; break;
-            case "音乐": pool = new String[]{"🎵 跟着节奏动起来～"}; break;
-            case "购物浏览": pool = new String[]{"又剁手了？蚊子我吃土就行", "逛逛逛，钱包还好吗～"}; break;
-            default: return null;
+        List<String> pool = new ArrayList<String>();
+        for (String line : Quotes.get("appsense")) {
+            String[] p = line.split("\\|");
+            if (p.length == 2 && p[0].equals(key)) pool.add(p[1]);
         }
-        return pool[rnd.nextInt(pool.length)];
+        if (pool.isEmpty()) return null;
+        return pool.get(rnd.nextInt(pool.size()));
     }
-
+    
     // ---------------- 阶段4：随机事件 / 小剧场 / 成就 / 教程 ----------------
 
     /** 3 分钟轮询：随机事件 + 小游戏 + 小剧场（均带冷却与概率门） */
@@ -1295,17 +1284,17 @@ public class PetService extends Service implements Flyer.Host {
 
     /** 首次教程：7 步气泡序列 */
     private void playTutorial() {
-        String[] steps = Extras.TUTORIAL;
-        for (int i = 0; i < steps.length; i++) {
-            final String t = steps[i];
+        List<String> steps = Quotes.get("tutorial");
+        for (int i = 0; i < steps.size(); i++) {
+            final String t = steps.get(i);
             handler.postDelayed(() -> showBubble(t, 4200), 800L + i * 5000L);
         }
         handler.postDelayed(() -> {
             DataStore.putBool("tutorialDone", true);
             showBubble("教程完啦！多多关照～嗡嗡嗡", 3000);
-        }, 800L + steps.length * 5000L);
+        }, 800L + steps.size() * 5000L);
     }
-
+    
     // ---------------- Flyer.Host 实现 ----------------
 
     @Override
@@ -1359,14 +1348,19 @@ public class PetService extends Service implements Flyer.Host {
     /** 时间感知：返回 [时段名, 问候语]；凌晨/清晨/上午/中午/下午/傍晚/晚上/深夜 */
     public static String[] timePeriod() {
         int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        if (h < 5) return new String[]{"凌晨", "都凌晨了还不睡？！"};
-        if (h < 8) return new String[]{"清晨", "早起的蚊子有血吸～早！"};
-        if (h < 12) return new String[]{"上午", "上午好！今天打算干点什么？"};
-        if (h < 14) return new String[]{"中午", "中午啦，记得吃饭别糊弄～"};
-        if (h < 18) return new String[]{"下午", "下午好，起来活动活动～"};
-        if (h < 20) return new String[]{"傍晚", "傍晚了，今天过得咋样？"};
-        if (h < 23) return new String[]{"晚上", "晚上好～放松一下吧"};
-        return new String[]{"深夜", "都深夜了，早点睡！"};
+                String[] names = {"凌晨", "清晨", "上午", "中午", "下午", "傍晚", "晚上", "深夜"};
+        String[] keys = {"period_dawn", "period_morning", "period_am", "period_noon",
+                "period_pm", "period_dusk", "period_night", "period_late"};
+        int idx;
+        if (h < 5) idx = 0;
+        else if (h < 8) idx = 1;
+        else if (h < 12) idx = 2;
+        else if (h < 14) idx = 3;
+        else if (h < 18) idx = 4;
+        else if (h < 20) idx = 5;
+        else if (h < 23) idx = 6;
+        else idx = 7;
+        return new String[]{names[idx], Quotes.get(keys[idx]).get(0)};
     }
 
     /** 60s 轮询：跨时段播报问候（挂在 moodTick 里调）；AI 提示词也带上当前时间 */
@@ -1534,6 +1528,7 @@ public class PetService extends Service implements Flyer.Host {
             @Override public Random rnd() { return rnd; }
             @Override public int screenW() { return screenW; }
             @Override public int screenH() { return screenH; }
+            @Override public PetService pet() { return PetService.this; }
         });
         prankMode = true;
         // 陪伴蚊先隐藏，让位给蚊群
@@ -1600,6 +1595,16 @@ public class PetService extends Service implements Flyer.Host {
         apiBase = sp.getString("apiBase", URL_API);
         apiKey = sp.getString("apiKey", KEY_API);
         apiModel = sp.getString("apiModel", MODEL);
+    }
+
+    /** 接口地址智能补全（静态版，供 Memory 副 API 用） */
+    static String normalizeEndpointStatic(String base) {
+        String u = base == null ? "" : base.trim();
+        if (u.length() == 0) return u;
+        if (u.endsWith("#")) return u.substring(0, u.length() - 1).trim();
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        if (u.endsWith("/chat/completions")) return u;
+        return u + "/chat/completions";
     }
 
     /** 接口地址智能补全：
@@ -1729,9 +1734,7 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     public String q(String key) {
-        java.util.List<String> l = quotes.get(key);
-        if (l == null || l.isEmpty()) return "嗡？";
-        return l.get(rnd.nextInt(l.size()));
+        return Quotes.pick(key, rnd);
     }
 
     public void toggleWork() {
@@ -1834,6 +1837,8 @@ public class PetService extends Service implements Flyer.Host {
                                     + "（" + timePeriod()[0] + "）"
                                     + (DataStore.sp().getString("weatherCache", "").isEmpty() ? "" : "\n【今日天气】" + DataStore.sp().getString("weatherCache", ""))
                                     + "\n【前台应用】" + (currentAppLabel() == null ? "未知（无权限）" : currentAppLabel())
+                                    + Memory.promptBlock()
+                                    + (Memory.userPersona().isEmpty() ? "" : "\n【用户身份（用户自述）】" + Memory.userPersona())
                                     + "\n\n请用你的口吻回应，两句话以内，不要客套。"));
             // 短期记忆：最近 10 轮对话注入（保持因果顺序）
             java.util.List<String> hist;
@@ -1884,6 +1889,15 @@ public class PetService extends Service implements Flyer.Host {
                 }
             } catch (Exception ignored) {}
             final String fReply = reply;
+            if (fReply != null) {
+                // 记忆本：原始记忆追加（情景+回复），攒到阈值由副 API 自动整理
+                Memory.append(situation, fReply);
+                if (Memory.shouldDigest()) {
+                    Memory.digest(PetService.this, (ok, d, e) -> {
+                        if (ok) showBubble("🧠 记忆整理完毕（" + Memory.keep() + " 条长期记忆入库）", 4000);
+                    });
+                }
+            }
             logChat("蚊", fReply == null ? q("fallback") : fReply);
             handler.post(() -> {
                 pending = false;

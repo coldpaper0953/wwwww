@@ -35,6 +35,8 @@ public class PrankEngine {
         int screenW();
 
         int screenH();
+
+        PetService pet();
     }
 
     private final Host h;
@@ -127,9 +129,9 @@ public class PrankEngine {
         double a = h.rnd().nextDouble() * Math.PI * 2;
         s.vx = (float) Math.cos(a) * sp;
         s.vy = (float) Math.sin(a) * sp;
-        ImageView iv = new ImageView(((PetService) h).getApplicationContext());
+        ImageView iv = new ImageView(h.pet().getApplicationContext());
         // 借用主宠的帧图（第一帧）；波次高时换红/紫/黑 tint
-        int res = ((PetService) h).mosquitoRes();
+        int res = h.pet().mosquitoRes();
         iv.setImageResource(res);
         if (wave >= 2) iv.setColorFilter(redTint(wave));
         s.view = iv;
@@ -171,7 +173,7 @@ public class PrankEngine {
         // BOSS 解锁：杀满 40 或撑 10 分钟
         if (!bossDefeated && boss == null && (kills >= 40 || System.currentTimeMillis() - startAt > 600000L)) {
             if (kills >= 38 && kills < 40) {
-                ((PetService) h).showBubble("⚠️ BOSS 即将出现！做好准备！", 3000);
+                h.pet().showBubble("⚠️ BOSS 即将出现！做好准备！", 3000);
             }
             spawnBoss();
         }
@@ -196,7 +198,7 @@ public class PrankEngine {
 
     private void hideAndSeek() {
         for (Swarm s : new ArrayList<Swarm>(swarm)) removeSwarm(s);
-        ((PetService) h).showBubble("嗡～躲猫猫开始！", 2500);
+        h.pet().showBubble("嗡～躲猫猫开始！", 2500);
         h.handler().postDelayed(() -> {
             if (!running) return;
             for (int i = 0; i < Math.min(spawnBudget + wave * 2, 10); i++) spawn(true);
@@ -205,7 +207,7 @@ public class PrankEngine {
 
     private void showBanner(String text) {
         if (banner == null) {
-            banner = new TextView(((PetService) h).getApplicationContext());
+            banner = new TextView(h.pet().getApplicationContext());
             banner.setTextSize(20);
             banner.setTextColor(Color.RED);
             banner.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
@@ -227,24 +229,18 @@ public class PrankEngine {
 
     // ================= 伪造报错弹窗 =================
 
-    private static final String[][] FAKE_ERRORS = {
-            {"系统错误", "Mosquito.dll 内存溢出：检测到生物组织。\n点击确定释放蚊子。"},
-            {"鼠标驱动异常", "光标正在被吸血。建议立即拍打屏幕。"},
-            {"磁盘空间不足", "C:\\蚊子卵 文件夹占用 500GB。\n是否清理？"},
-            {"网络连接中断", "检测到蚊子翅膀震动干扰 WiFi 信号。"},
-            {"杀毒软件警告", "发现蚊群正在繁殖。建议物理清除。"},
-            {"系统更新", "Windows 防蚊补丁 KB666666 安装失败。"},
-            {"蓝屏预警", "蚊子密度超过阈值。系统将于 3 秒后蓝屏。"},
-            {"摄像头占用", "蚊子正在使用你的摄像头直播它的飞行。"},
-    };
+    
 
     private void popFakeError() {
-        String[] e = FAKE_ERRORS[h.rnd().nextInt(FAKE_ERRORS.length)];
+        List<String> es = Quotes.get("fake_error");
+        if (es.isEmpty()) return;
+        String e = es.get(h.rnd().nextInt(es.size()));
+        String[] parts = e.split("\\|");
         // 借主宠的气泡+增援一只
-        ((PetService) h).showBubble("⚠ " + e[0] + "\n" + e[1], 4000);
+        h.pet().showBubble("⚠ " + parts[0] + "\n" + (parts.length > 1 ? parts[1] : ""), 4000);
         spawn(true);
     }
-
+    
     /** 周期弹报错（约 100 秒一个）+增援 */
     private void fakeErrorTick() {
         if (!running) return;
@@ -268,8 +264,8 @@ public class PrankEngine {
         final BossMiss b = new BossMiss();
         bossHp = 35;
         b.hp = bossHp;
-        ImageView iv = new ImageView(((PetService) h).getApplicationContext());
-        iv.setImageResource(((PetService) h).mosquitoRes());
+        ImageView iv = new ImageView(h.pet().getApplicationContext());
+        iv.setImageResource(h.pet().mosquitoRes());
         iv.setColorFilter(new android.graphics.PorterDuffColorFilter(Color.rgb(160, 0, 0), android.graphics.PorterDuff.Mode.SRC_ATOP));
         iv.setScaleX(2f);
         iv.setScaleY(2f);
@@ -303,7 +299,7 @@ public class PrankEngine {
         if (h.rnd().nextInt(100) < 40) {
             int n = 1 + h.rnd().nextInt(3);
             for (int i = 0; i < n; i++) spawn(true);
-            ((PetService) h).showBubble("BOSS 召唤了 " + n + " 只小蚊！", 2000);
+            h.pet().showBubble("BOSS 召唤了 " + n + " 只小蚊！", 2000);
         }
         // 血量 <15 泛红暴走
         if (boss.hp < 15) {
@@ -331,9 +327,9 @@ public class PrankEngine {
         }
         // 分身术彩蛋 5-15%
         if (h.rnd().nextInt(100) < 15) {
-            ((PetService) h).showBubble("分身术！", 1500);
+            h.pet().showBubble("分身术！", 1500);
             for (int i = 0; i < 2; i++) spawn(true);
-            h.handler().postDelayed(() -> ((PetService) h).showBubble("查克拉耗尽…", 1500), 8000);
+            h.handler().postDelayed(() -> h.pet().showBubble("查克拉耗尽…", 1500), 8000);
         }
         // 终局演出：报错→BSOD→救赎终蚊
         endGame();
@@ -342,13 +338,13 @@ public class PrankEngine {
     // ================= 终局 =================
 
     private void endGame() {
-        ((PetService) h).showBubble("⚠ CRITICAL_SYSTEM_FAILURE\n蚊子系统崩溃中…", 4000);
+        h.pet().showBubble("⚠ CRITICAL_SYSTEM_FAILURE\n蚊子系统崩溃中…", 4000);
         h.handler().postDelayed(this::showBsod, 4000);
     }
 
     /** 全屏假蓝屏 + 救赎终蚊 */
     private void showBsod() {
-        TextView bsod = new TextView(((PetService) h).getApplicationContext());
+        TextView bsod = new TextView(h.pet().getApplicationContext());
         bsod.setBackgroundColor(Color.rgb(20, 60, 170));
         bsod.setTextColor(Color.WHITE);
         bsod.setTextSize(16);
@@ -378,8 +374,8 @@ public class PrankEngine {
     }
 
     private void finalMosquito(final TextView bsod) {
-        final ImageView fin = new ImageView(((PetService) h).getApplicationContext());
-        fin.setImageResource(((PetService) h).mosquitoRes());
+        final ImageView fin = new ImageView(h.pet().getApplicationContext());
+        fin.setImageResource(h.pet().mosquitoRes());
         fin.setScaleX(1.5f);
         fin.setScaleY(1.5f);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(140, 140,
@@ -389,7 +385,7 @@ public class PrankEngine {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.CENTER;
         try { h.wm().addView(fin, lp); } catch (Exception e) { return; }
-        TextView tip = new TextView(((PetService) h).getApplicationContext());
+        TextView tip = new TextView(h.pet().getApplicationContext());
         tip.setText("是时候结束这一切了，点我吧");
         tip.setTextColor(Color.WHITE);
         tip.setTextSize(14);
@@ -411,7 +407,7 @@ public class PrankEngine {
                 stop();
                 String report = "🪧 整蛊战报\n击杀 " + kills + " 只 · 存活 " +
                         (System.currentTimeMillis() - startAt) / 1000 + " 秒 · 最高第 " + wave + " 波\n蚊子大军已被你终结！";
-                ((PetService) h).showBubble(report, 9000);
+                h.pet().showBubble(report, 9000);
                 return true;
             }
             return false;

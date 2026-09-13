@@ -19,23 +19,17 @@ public class Extras {
         // 突然提问 5%，30 分钟冷却
         if (rnd.nextInt(100) < 5 && now - DataStore.getLong("evAsk", 0) > 1800000L) {
             DataStore.putLong("evAsk", now);
-            String[] asks = {"你觉得我可爱吗？诚实点！", "午饭吃的什么？别又是外卖…", "如果蚊子会许愿，你猜我许什么？",
-                    "你手机里这么多 App，最喜欢哪个？", "说！今天有没有想我（一点点也算）"};
-            return "💬 " + asks[rnd.nextInt(asks.length)];
+            return "💬 " + Quotes.pick("ev_ask", rnd);
         }
         // 讲故事 1%，2 小时冷却
         if (rnd.nextInt(100) < 1 && now - DataStore.getLong("evStory", 0) > 7200000L) {
             DataStore.putLong("evStory", now);
-            String[] stories = {"我飞进过程序员的咖啡杯，差点被当 bug 修复…", "昨天我躲在耳机里听了一下午歌，白嫖！",
-                    "我见过凌晨四点的手机屏幕，比你亮。", "有一次差点被电蚊拍追杀，我学会了蛇皮走位。"};
-            return "📖 " + stories[rnd.nextInt(stories.length)];
+            return "📖 " + Quotes.pick("ev_story", rnd);
         }
         // 心情波动 3%，40 分钟冷却
         if (rnd.nextInt(100) < 3 && now - DataStore.getLong("evMood", 0) > 2400000L) {
             DataStore.putLong("evMood", now);
-            String[] moods = {"（突然有点emo）你说蚊子有朋友吗…", "今天莫名开心，想给你表演后空翻！",
-                    "哼，说不上来，就是有点小情绪。", "（原地转圈）开心！没理由的开心！"};
-            return moods[rnd.nextInt(moods.length)];
+            return Quotes.pick("ev_mood", rnd);
         }
         return null;
     }
@@ -87,15 +81,9 @@ public class Extras {
         if (rnd.nextInt(100) >= 2) return null;
         if (now - DataStore.getLong("evTheater", 0) < 3600000L) return null;
         DataStore.putLong("evTheater", now);
-        String[][] pool = {
-                {"你发现我半夜偷偷在你手机充电口旁边取暖", "假装没看见", "给我盖个小被子"},
-                {"我在你屏幕上跳舞被卡组队邀请打断", "让它继续跳", "加入它一起跳"},
-                {"我叼来一颗不知道哪来的糖放在你键盘上", "收下并道谢", "让它自己吃"},
-                {"下雨天我淋湿了翅膀躲在状态栏里", "用纸巾给它擦擦", "让它自己晾干"},
-                {"我宣布今天是我的生日（真的吗）", "半信半疑地庆祝", "戳穿并揉搓它"},
-        };
-        String[] t = pool[rnd.nextInt(pool.length)];
-        return new String[]{t[0], t[1], t[2]};
+        List<String> ths = Quotes.get("theater");
+        String[] t = ths.get(rnd.nextInt(ths.size())).split("\\|");
+        return t.length == 3 ? t : null;
     }
 
     /** 小剧场结算：A 倾向 +5~15，B 随机 -10~+10；记入回忆录（最近 100 条） */
@@ -175,16 +163,6 @@ public class Extras {
     }
 
     // ================= 教程（7 步，气泡序列） =================
-
-    public static final String[] TUTORIAL = {
-            "嗡嗡～我飞到你手机上啦！",
-            "点我一下＝戳戳（第一下我会说嗯？）",
-            "连点三下会把我拍扁…我会复活的！",
-            "按住 0.65 秒＝温柔摸头，长按 1.5 秒＝打开设置",
-            "两根手指捏我＝放大缩小",
-            "设置页里有手账/献血/专注/成就，慢慢玩～",
-            "那就…多多关照啦！嗡嗡～",
-    };
 
     // ================= 饲养指南 =================
 

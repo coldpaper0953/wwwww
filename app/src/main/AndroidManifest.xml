@@ -48,6 +48,16 @@
             android:screenOrientation="portrait"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <activity
+            android:name=".QuotesActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".MemoryActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <service
             android:name=".PetService"
             android:exported="false"

@@ -28,6 +28,8 @@ public class SettingsActivity extends Activity {
     private EditText prankCount;
     private TextView[] glideBtns;
     private TextView tabBtn, senseBtn;
+    private android.widget.SeekBar sizeSlider;
+    private TextView sizeVal;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -108,6 +110,36 @@ public class SettingsActivity extends Activity {
         // ============ 宠物设置卡片 ============
         root.addView(cardLabel("🐝 宠物设置"));
         LinearLayout petCard = card();
+
+        petCard.addView(rowLabel("蚊子大小（捏合也可调）"));
+        LinearLayout sizeRow = new LinearLayout(this);
+        sizeRow.setOrientation(LinearLayout.HORIZONTAL);
+        sizeSlider = new android.widget.SeekBar(this);
+        sizeSlider.setMax(224);   // 32-256px
+        sizeSlider.setProgress((int) (PetService.instance != null ? PetService.instance.petScale * 96 : 96) - 32);
+        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        sizeRow.addView(sizeSlider, slp);
+        sizeVal = new TextView(this);
+        sizeVal.setTextSize(13);
+        sizeVal.setTypeface(Typeface.DEFAULT_BOLD);
+        sizeVal.setTextColor(Color.parseColor("#111111"));
+        sizeVal.setGravity(Gravity.CENTER);
+        sizeVal.setMinWidth(dp(48));
+        sizeRow.addView(sizeVal);
+        sizeSlider.setOnSeekBarChangeListener(new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(android.widget.SeekBar sb, int p, boolean fromUser) {
+                sizeVal.setText((p + 32) + "px");
+                if (fromUser && PetService.instance != null) {
+                    PetService.instance.setSizeByPx(p + 32);
+                }
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar sb) {}
+            @Override public void onStopTrackingTouch(android.widget.SeekBar sb) {
+                if (PetService.instance != null) PetService.instance.saveSizeNow();
+            }
+        });
+        petCard.addView(sizeRow);
+        petCard.addView(gap(8));
 
         petCard.addView(rowLabel("飞行速度"));
         LinearLayout speedRow = new LinearLayout(this);
@@ -205,14 +237,24 @@ public class SettingsActivity extends Activity {
         root.addView(petCard);
         root.addView(gap(10));
 
-        // ============ 语录卡片 ============
-        root.addView(cardLabel("🗣️ 语录（宠物说的本地台词，一行一条）"));
+        // ============ 语录卡片（旧5组入口保留） → 全量台词工坊 ============
+        root.addView(cardLabel("🗣 台词与记忆"));
         LinearLayout qCard = card();
-        addQuoteRow(qCard, "戳击", "tap");
-        addQuoteRow(qCard, "被扔出", "throw");
-        addQuoteRow(qCard, "复活", "revive");
-        addQuoteRow(qCard, "睡觉", "sleep");
-        addQuoteRow(qCard, "网络异常兜底", "fallback");
+        LinearLayout qRow = new LinearLayout(this);
+        qRow.setOrientation(LinearLayout.HORIZONTAL);
+        TextView quotesAll = button("🗣 台词工坊（全部台词含教程）");
+        quotesAll.setOnClickListener(v -> startActivity(new Intent(this, QuotesActivity.class)));
+        qRow.addView(quotesAll);
+        qRow.addView(gapW(6));
+        TextView memBtn = button("🧠 记忆本");
+        memBtn.setOnClickListener(v -> startActivity(new Intent(this, MemoryActivity.class)));
+        qRow.addView(memBtn);
+        qCard.addView(qRow);
+        qCard.addView(gap(6));
+        TextView qHint = small("#999999", Gravity.LEFT);
+        qHint.setText("台词工坊里可改：戳/扔/复活/时段问候/主动搭话题/小剧场/伪造报错/App吐槽/新手教程等全部文案；记忆本里可看 AI 的记忆、设副 API 和你的身份。");
+        qHint.setPadding(dp(2), 0, 0, 0);
+        qCard.addView(qHint);
         root.addView(qCard);
         root.addView(gap(10));
 
@@ -555,46 +597,6 @@ public class SettingsActivity extends Activity {
         e.setPadding(dp(10), dp(8), dp(10), dp(8));
         e.setBackground(box());
         return e;
-    }
-
-    private void addQuoteRow(LinearLayout card, final String label, final String key) {
-        LinearLayout r = new LinearLayout(this);
-        r.setOrientation(LinearLayout.HORIZONTAL);
-        TextView name = new TextView(this);
-        name.setText(label);
-        name.setTextSize(13);
-        name.setTextColor(Color.parseColor("#111111"));
-        name.setGravity(Gravity.CENTER_VERTICAL);
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
-        r.addView(name, nlp);
-        TextView edit = button("✏️ 编辑");
-        edit.setOnClickListener(v -> {
-            if (PetService.instance == null) return;
-            final EditText in = new EditText(this);
-            in.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-            in.setMinLines(3);
-            in.setTextSize(13);
-            java.util.List<String> cur = PetService.instance.quotes.get(key);
-            StringBuilder sb = new StringBuilder();
-            if (cur != null) for (String s : cur) sb.append(s).append('\n');
-            in.setText(sb.toString());
-            new AlertDialog.Builder(this)
-                    .setTitle("编辑语录：" + label)
-                    .setView(in)
-                    .setPositiveButton("保存", (d, w) -> {
-                        java.util.List<String> lines = new java.util.ArrayList<String>();
-                        for (String s : in.getText().toString().split("\n")) {
-                            if (s.trim().length() > 0) lines.add(s.trim());
-                        }
-                        PetService.instance.saveQuoteGroup(key, lines);
-                        Toast.makeText(this, "已保存", Toast.LENGTH_SHORT).show();
-                    })
-                    .setNegativeButton("取消", null)
-                    .show();
-        });
-        r.addView(edit);
-        card.addView(r);
-        card.addView(gap(6));
     }
 
     private void editAffectionDialog() {

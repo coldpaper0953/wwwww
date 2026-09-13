@@ -59,6 +59,7 @@ public class PlannerActivity extends Activity {
         addRow.addView(gapW(6));
         final EditText dIn = input("DDL 时:分");
         dIn.setMinWidth(dp(90));
+        dIn.setMaxWidth(dp(110));
         addRow.addView(dIn);
         addRow.addView(gapW(6));
         TextView addBtn = button("＋");
@@ -139,6 +140,7 @@ public class PlannerActivity extends Activity {
         final EditText minIn = input("分钟(1-120)");
         minIn.setText("25");
         minIn.setMinWidth(dp(80));
+        minIn.setMaxWidth(dp(100));
         fRow.addView(minIn);
         fRow.addView(gapW(6));
         final EditText goalIn = input("本次目标(可选)");
@@ -334,6 +336,8 @@ public class PlannerActivity extends Activity {
         t.setTextSize(13);
         t.setTextColor(Color.parseColor("#111111"));
         t.setGravity(Gravity.CENTER_VERTICAL);
+        t.setSingleLine(true);
+        t.setEllipsize(android.text.TextUtils.TruncateAt.END);
         return t;
     }
 
@@ -366,7 +370,7 @@ public class PlannerActivity extends Activity {
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(14), dp(8), dp(14), dp(8));
+        t.setPadding(dp(10), dp(8), dp(10), dp(8));
         t.setBackground(box());
         return t;
     }
