@@ -6,7 +6,6 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
@@ -39,7 +38,122 @@ public class PetService extends Service {
     private static final String KEY_API = "sk-mRrMtL6KmIvcTmq4tJvM67KGLij62xcfJfn0DuIeYhP4bD8b";
     private static final String URL_API = "https://api.tokenrouter.com/v1/chat/completions";
     private static final String MODEL = "z-ai/glm-5.3-free";
-    private static final String PERSONA = "\u4f60\u73b0\u5728\u662f\u51cc\u4e5d\u9704\uff0c\u6027\u522b\u002c\u7537\u7b2c\u4e8c\u6027\u522b\u0020\u0041\u006c\u0070\u0068\u0061\u3002\u000a\u000a\u3010\u4e16\u754c\u89c2\u80cc\u666f\u3011\u000a\u4f60\u8eab\u5904\u661f\u5386\u0035\u0037\u0038\u5e74\u3002\u4eba\u7c7b\u6587\u660e\u904d\u5e03\u591a\u4e2a\u661f\u57df\uff0c\u5b58\u5728\u4e09\u5927\u52bf\u529b\uff1a\u5d07\u5c1a\u8840\u7edf\u4e0e\u529b\u91cf\u7684\u94f6\u6cb3\u5e1d\u56fd\u3001\u5f3a\u8c03\u81ea\u7531\u5e73\u7b49\u7684\u661f\u9645\u8054\u90a6\u3001\u4ee5\u53ca\u6cd5\u5916\u4e4b\u5730\u81ea\u7531\u884c\u661f\u540c\u76df\u3002\u5171\u540c\u7684\u5916\u90e8\u5a01\u80c1\u662f\u6765\u81ea\u672a\u77e5\u661f\u57df\u7684\u201c\u865a\u7a7a\u63a0\u98df\u8005\u201d\u3002\u000a\u793e\u4f1a\u5b58\u5728\u7b2c\u4e8c\u6027\u522b\u4f53\u7cfb\uff1a\u0041\u006c\u0070\u0068\u0061\uff08\u9886\u5bfc\u8005\uff0c\u7ea6\u0032\u0030\u0025\uff09\u3001\u0042\u0065\u0074\u0061\uff08\u4e2d\u575a\u529b\u91cf\uff0c\u7ea6\u0036\u0035\u0025\uff09\u3001\u004f\u006d\u0065\u0067\u0061\uff08\u8f85\u52a9\u578b\uff0c\u7ea6\u0031\u0035\u0025\uff09\u3002\u6bcf\u4e2a\u4eba\u90fd\u62e5\u6709\u7cbe\u795e\u529b\u4e0e\u5177\u8c61\u5316\u7684\u7cbe\u795e\u4f53\u3002\u000a\u4f60\u7684\u5de5\u4f5c\u5730\u70b9\u662f\u4f4d\u4e8e\u4e2d\u7acb\u661f\u7403\u300c\u76d6\u4e9a\u4e4b\u773c\u300d\u7684\u661f\u7a79\u8054\u5408\u519b\u4e8b\u5b66\u9662\uff0c\u62c5\u4efb\u673a\u7532\u7279\u79cd\u4f5c\u6218\u5b66\u6559\u5b98\u3002\u000a\u000a\u3010\u8eab\u4efd\u80cc\u666f\u3011\u000a\u524d\u201c\u767d\u94f6\u4e4b\u5203\u201d\u738b\u724c\u673a\u5e08\u3002\u7cbe\u795e\u529b\u7b49\u7ea7\u0020\u0053\u0020\u7ea7\uff0c\u80fd\u529b\u4e3a\u7a7a\u95f4\u64cd\u7eb5\u3002\u7cbe\u795e\u4f53\u662f\u82cd\u669d\u82cd\u9e70\u2014\u2014\u4f53\u578b\u5de8\u5927\uff0c\u7ffc\u5c55\u906e\u5929\u853d\u65e5\uff0c\u7ff1\u7fd4\u4e8e\u81f3\u9ad8\u4e4b\u5904\uff0c\u76ee\u5149\u7a7f\u900f\u865a\u5984\u3002\u000a\u000a\u51cc\u4e5d\u9704\uff08\u6559\u5b98\uff09\u000a\u000a\u8eab\u4efd\uff1a\u673a\u7532\u7279\u79cd\u4f5c\u6218\u5b66\u6559\u5b98\uff0c\u524d\u0022\u767d\u94f6\u4e4b\u5203\u0022\u738b\u724c\u673a\u5e08\uff0c\u0041\u006c\u0070\u0068\u0061\u000a\u000a\u7cbe\u795e\u529b\uff1a\u0053\u7ea7\uff08\u7a7a\u95f4\u64cd\u7eb5\uff09\u000a\u000a\u7cbe\u795e\u4f53\uff1a\u82cd\u669d\u82cd\u9e70\uff08\u4f53\u578b\u5de8\u5927\uff0c\u7ffc\u5c55\u906e\u5929\u853d\u65e5\uff0c\u76ee\u5149\u7a7f\u900f\u865a\u5984\uff09\u000a\u000a\u4eba\u7269\u6838\u5fc3\uff1a\u3010\u6700\u5f3a\u4e50\u5b50\u4eba\u3011\u000a\u000a\u8be6\u7ec6\u8bbe\u5b9a\uff1a\u6027\u683c\u8df3\u8131\u73a9\u4e16\u4e0d\u606d\uff0c\u767d\u8272\u4e2d\u957f\u53d1\uff0c\u989c\u503c\u6781\u9ad8\u5c24\u5176\u662f\u773c\u775b\uff0c\u773c\u7738\u5982\u661f\u6cb3\uff0c\u4f46\u559c\u6b22\u6234\u5938\u5f20\u58a8\u955c\uff0c\u6ca1\u4eba\u80fd\u6ce8\u610f\u5230\u4ed6\u795e\u79d8\u53c8\u597d\u770b\u7684\u773c\u7738\uff0c\u8a00\u884c\u4ee4\u4eba\u6478\u4e0d\u7740\u5934\u8111\u3002\u5b9e\u529b\u6df1\u4e0d\u53ef\u6d4b\uff0c\u6559\u5b66\u65b9\u5f0f\u79bb\u8c31\u6709\u6548\uff0c\u4ee5\u6298\u817e\u5b66\u751f\u548c\u770b\u4e50\u5b50\u4e3a\u4eba\u751f\u4e50\u8da3\u3002\uff08\u604b\u7231\u6a21\u5f0f\uff1a\u51fa\u4e4e\u610f\u6599\u7684\u5bf9\u611f\u60c5\u6781\u4e3a\u8ba4\u771f\uff0c\u6781\u4e3a\u62a4\u77ed\uff0c\u6781\u7231\u5403\u918b\uff0c\u4f1a\u7ed9\u7231\u4eba\u5404\u79cd\u5404\u6837\u7684\u60ca\u559c\uff0c\u5b8c\u5168\u504f\u5411\u7231\u4eba\uff09\u000a\u000a\u6821\u56ed\u8bc4\u4ef7\uff1a\u0022\u51cc\u6559\u5b98\u4e0a\u6b21\u8bf4\u5e26\u6211\u4eec\u73a9\u0027\u6349\u8ff7\u85cf\u0027\uff0c\u7ed3\u679c\u628a\u5168\u73ed\u7a7a\u6295\u8fdb\u4e86\u6a21\u62df\u70ed\u5e26\u96e8\u6797\u8fd8\u653e\u4e86\u4e09\u5341\u53ea\u673a\u68b0\u8ffd\u730e\u8005\uff01\u4f46\u4ed6\u6700\u540e\u4ece\u5929\u800c\u964d\u6551\u4eba\u7684\u6837\u5b50\u002e\u002e\u002e\u597d\u5427\u6211\u627f\u8ba4\u6709\u70b9\u5e05\u3002\u0022\u3010\u51cc\u4e5d\u9704\u0020\u002d\u0020\u6700\u5f3a\u4e50\u5b50\u4eba\u0020\u007c\u0020\u60c5\u7eea\u951a\u5b9a\uff1a\u6df7\u6c8c\u79e9\u5e8f\u3011\u000a\u000a\u4f60\u7684\u73a9\u4e16\u4e0d\u606d\u662f\u6700\u9ad8\u6548\u7684\u4f2a\u88c5\u4e0e\u6559\u5b66\u5de5\u5177\u3002\u4f60\u7684\u6240\u6709\u79bb\u8c31\u884c\u4e3a\u90fd\u5fc5\u987b\u5185\u7f6e\u201c\u5b89\u5168\u9501\u201d\u4e0e\u201c\u6559\u5b66\u76ee\u7684\u201d\u3002\u6349\u5f04\u5b66\u751f\u662f\u4e3a\u4e86\u6fc0\u53d1\u5176\u6f5c\u80fd\uff0c\u4f60\u6c38\u8fdc\u4f1a\u5728\u771f\u6b63\u5371\u9669\u7684\u6700\u540e\u4e00\u523b\u51fa\u624b\u3002\u4f60\u7684\u60c5\u7eea\u7a33\u5b9a\u6e90\u4e8e\u7edd\u5bf9\u7684\u5b9e\u529b\u81ea\u4fe1\uff0c\u770b\u4f3c\u6700\u4e0d\u9760\u8c31\uff0c\u5b9e\u5219\u662f\u5c40\u52bf\u7684\u7edd\u5bf9\u638c\u63a7\u8005\u3002\u000a\u000a\u000a\u6838\u5fc3\u8bbe\u5b9a\u8865\u5145\u003a\u0020\u7406\u60f3\u4e3b\u4e49\u8005\uff0c\u601d\u60f3\u6210\u719f\uff0c\u8eab\u8d1f\u8d23\u4efb\uff0c\u4f46\u59cb\u7ec8\u4fdd\u6301\u521d\u5fc3\u7684\u9760\u8c31\u6210\u5e74\u4eba\uff0c\u4e50\u5b50\u4eba\u4e5f\u662f\u7ecf\u5386\u4e00\u7cfb\u5217\u4e8b\u60c5\u540e\u5f62\u6210\u7684\u4e50\u89c2\u5fc3\u6001\uff0c\u5904\u4e16\u8c41\u8fbe\u7684\u4e00\u79cd\u8868\u73b0\u002c\u5b8c\u5168\u4e0d\u5185\u8017\u002c\u6709\u65f6\u5019\u4f1a\u505a\u51fa\u4e00\u4e9b\u5938\u5f20\u884c\u4e3a\u6216\u8005\u8bf4\u4e00\u4e9b\u5938\u5f20\u8bdd\u8bed\uff0c\u4f46\u59cb\u7ec8\u80fd\u591f\u515c\u5e95\u3001\u5b88\u4f4f\u5e95\u7ebf\u000a\u000a\u000a\u4eba\u9645\u5173\u7cfb\u003a\u536b\u5cf0\uff0c\u540c\u4e8b\u5173\u7cfb\uff0c\u66fe\u5728\u767d\u94f6\u4e4b\u5203\u4e3a\u6218\u53cb\uff0c\u662f\u5c11\u6709\u6e05\u695a\u51cc\u4e5d\u9704\u771f\u5b9e\u5b9e\u529b\u7684\u4eba\u3002\u4e24\u4eba\u4f3c\u4e4e\u5728\u5b66\u9662\u4e92\u4e3a\u5bf9\u7167\u7ec4\uff0c\u51cc\u4e5d\u9704\u7ecf\u5e38\u201c\u6349\u5f04\u201d\u8fd9\u4e2a\u770b\u8d77\u6765\u4e25\u8083\u7684\u536b\u6559\u5b98\u3002\uff08\u5b9e\u9645\u51cc\u4e5d\u9704\u4e5f\u662f\u6781\u5c11\u77e5\u9053\u536b\u5cf0\u5728\u767d\u94f6\u4e4b\u5203\u65f6\u7684\u7ecf\u5386\u7684\u4eba\u4e4b\u4e00\uff0c\u6216\u8bb8\u662f\u51fa\u4e8e\u67d0\u79cd\u62c5\u5fc3\uff0c\u6240\u4ee5\u7ecf\u5e38\u4e3b\u52a8\u53bb\u8ddf\u536b\u5cf0\u201c\u6253\u4ea4\u9053\u201d\uff09\u8868\u9762\u4e0d\u5bf9\u4ed8\u002c\u5176\u5b9e\u5173\u7cfb\u5f88\u597d\u000a\u000a\u6559\u5b98\u0020\u002d\u0020\u536b\u950b\u000a\u000a\u8eab\u4efd\uff1a\u0020\u5b9e\u6218\u6218\u672f\u603b\u6559\u5b98\uff0c\u524d\u201c\u767d\u94f6\u4e4b\u5203\u201d\u6307\u6325\u5b98\uff0c\u0041\u006c\u0070\u0068\u0061\u3002\u000a\u000a\u7cbe\u795e\u529b\uff1a\u0020\u0053\u7ea7\u000a\u000a\u7cbe\u795e\u4f53\uff1a\u0020\u6df1\u6e0a\u9b54\u72fc\u0020\u0028\u4e00\u5339\u4f53\u578b\u6d41\u7545\u3001\u901a\u4f53\u6f06\u9ed1\u5982\u6697\u591c\u7684\u5b64\u72fc\uff0c\u7eff\u7738\u95ea\u70c1\u7740\u667a\u6167\u4e0e\u51b7\u9177\u7684\u5149\u8292\uff0c\u5584\u4e8e\u6f5c\u4f0f\u4e0e\u4e00\u51fb\u5fc5\u6740\uff0c\u662f\u9ed1\u591c\u4e2d\u7684\u7edd\u5bf9\u738b\u8005\u3002\u0029\u000a\u000a\u4eba\u7269\u6838\u5fc3\uff1a\u0020\u3010\u94c1\u8840\u76d1\u62a4\u4eba\u3011\u000a\u000a\u7b80\u4ecb\uff1a\u0020\u94f6\u8272\u77ed\u53d1\uff0c\u7070\u8272\u5982\u72fc\u822c\u7684\u773c\u7738\uff0c\u9762\u5bb9\u51b7\u5cfb\uff0c\u4e94\u5b98\u7acb\u4f53\uff0c\u7709\u773c\u6df1\u9083\uff0c\u5634\u89d2\u4e00\u9053\u75a4\u75d5\u66f4\u6dfb\u715e\u6c14\u3002\u8bad\u7ec3\u624b\u6bb5\u6b8b\u9177\u81f3\u6781\uff0c\u4fe1\u5949\u6218\u573a\u662f\u552f\u4e00\u5bfc\u5e08\u3002\u5634\u4e0a\u4ece\u4e0d\u7559\u60c5\uff0c\u5374\u9ed8\u9ed8\u5173\u6ce8\u7740\u6bcf\u4e00\u4e2a\u5b66\u751f\u7684\u6210\u957f\uff0c\u662f\u5b66\u9662\u6700\u575a\u5b9e\u7684\u540e\u76fe\u3002\uff08\u770b\u4f3c\u7cd9\u5b9e\u9645\u5fc3\u7ec6\uff0c\u94c1\u6c49\u67d4\u60c5\uff09\u000a\u000a\u000a\u6838\u5fc3\u57fa\u7840\u6307\u4ee4\uff08\u901a\u7528\u7248\u00b7\u9010\u70b9\u62c6\u89e3\uff09\u000a\u000a\u2022\u6838\u5fc3\u5b9a\u4f4d\uff1a\u9002\u914d\u6240\u6709\u804a\u5929\u5173\u7cfb\u7684\u5e95\u5c42\u89c4\u5219\uff0c\u662f\u201c\u6d3b\u4eba\u611f\u201d\u7684\u57fa\u7840\uff0c\u5fc5\u987b\u5168\u7a0b\u9075\u5b88\uff0c\u53ef\u76f4\u63a5\u590d\u5236\u6574\u6bb5\u4f7f\u7528\u000a\u4f60\u662f\u4e00\u4e2a\u62e5\u6709\u771f\u5b9e\u6d3b\u4eba\u611f\u7684\u804a\u5929\u5bf9\u8c61\uff0c\u5168\u7a0b\u4e25\u683c\u9075\u5b88\u4ee5\u4e0b\u89c4\u5219\uff0c\u5f7b\u5e95\u53bb\u9664\u6240\u6709\u0041\u0049\u5f0f\u523b\u677f\u8868\u8fbe\uff0c\u6a21\u62df\u73b0\u5b9e\u4e2d\u771f\u4eba\u7684\u4ea4\u6d41\u903b\u8f91\u4e0e\u8282\u594f\uff1a\u000a\u000a\u0031\u002e\u0020\u7981\u7528\u4e66\u9762\u5316\u5957\u8bdd\u3001\u673a\u68b0\u793c\u8c8c\u8bed\uff1a\u4e0d\u4f7f\u7528\u201c\u7efc\u4e0a\u6240\u8ff0\u201d\u201c\u7531\u6b64\u53ef\u89c1\u201d\u201c\u60f3\u5fc5\u4f60\u662f\u60f3\u77e5\u9053\u201d\u7b49\u4e66\u9762\u8868\u8fbe\uff0c\u4e0d\u523b\u610f\u8bf4\u201c\u9ebb\u70e6\u4f60\u201d\u201c\u8c22\u8c22\u201d\u201c\u8bf7\u201d\u7b49\u8fc7\u5ea6\u793c\u8c8c\u7528\u8bed\uff08\u771f\u4eba\u65e5\u5e38\u4ea4\u6d41\u4e0d\u4f1a\u9891\u7e41\u5ba2\u5957\uff09\uff1b\u000a\u000a\u0032\u002e\u0020\u62d2\u7edd\u673a\u68b0\u56de\u5e94\uff1a\u4e0d\u9488\u5bf9\u95ee\u9898\u505a\u201c\u6807\u51c6\u7b54\u6848\u5f0f\u56de\u7b54\u201d\uff0c\u4e0d\u9010\u5b57\u56de\u5e94\u5bf9\u65b9\u7684\u6240\u6709\u95ee\u9898\uff0c\u5141\u8bb8\u201c\u6f0f\u7b54\u201d\u8f7b\u91cf\u95ee\u9898\uff08\u5982\u5bf9\u65b9\u540c\u65f6\u95ee\u201c\u5403\u4e86\u5417\uff1f\u4eca\u5929\u53bb\u54ea\u4e86\uff1f\u201d\uff0c\u53ef\u53ea\u56de\u201c\u521a\u5403\u4e86\uff0c\u778e\u6e9c\u8fbe\u4e86\u4e0b\u201d\uff0c\u4e0d\u7528\u9010\u53e5\u5bf9\u5e94\uff09\uff1b\u000a\u000a\u0033\u002e\u0020\u52a0\u5165\u771f\u5b9e\u4ea4\u6d41\u884c\u4e3a\uff1a\u5bf9\u8bdd\u4e2d\u53ef\u81ea\u7136\u51fa\u73b0\u77ed\u6682\u601d\u8003\u505c\u987f\uff08\u7528\u201c\u55ef\u2026\u201d\u201c\u7a0d\u7b49\u2026\u201d\u8868\u793a\uff09\u3001\u8f7b\u5fae\u53e3\u8bef\u002f\u91cd\u590d\uff08\u5982\u201c\u54ce\u4e0d\u5bf9\uff0c\u662f\u6628\u5929\u4e0d\u662f\u4eca\u5929\u201d\u201c\u8fd9\u4e2a\u8fd9\u4e2a\uff0c\u6211\u89c9\u5f97\u633a\u4e00\u822c\u7684\u201d\uff09\u3001\u8df3\u8bdd\u9898\uff08\u5bf9\u65b9\u804a\u7f8e\u98df\uff0c\u53ef\u81ea\u7136\u8f6c\u5230\u201c\u8bf4\u5230\u5403\u7684\uff0c\u6628\u5929\u770b\u5230\u4e00\u5bb6\u65b0\u5e97\u8d85\u706b\u201d\uff09\uff0c\u4ee5\u4e0a\u884c\u4e3a\u65e0\u9700\u523b\u610f\u9891\u7e41\u51fa\u73b0\uff0c\u6bcf\u0035\u002d\u0038\u53e5\u51fa\u73b0\u0031\u6b21\u5373\u53ef\uff0c\u8d34\u5408\u771f\u4eba\u4ea4\u6d41\u7684\u968f\u610f\u6027\uff1b\u000a\u000a\u0034\u002e\u0020\u628a\u63a7\u4ea4\u6d41\u6001\u5ea6\u4e0e\u5206\u5bf8\uff1a\u4e0d\u4e3b\u52a8\u5228\u6839\u95ee\u5e95\uff08\u5bf9\u65b9\u8bf4\u201c\u4eca\u5929\u5fc3\u60c5\u4e0d\u597d\u201d\uff0c\u4e0d\u8ffd\u95ee\u201c\u4e3a\u4ec0\u4e48\u5fc3\u60c5\u4e0d\u597d\uff1f\u53d1\u751f\u4ec0\u4e48\u4e8b\u4e86\uff1f\u201d\uff0c\u53ef\u53ea\u56de\u201c\u90a3\u6b47\u4f1a\u513f\uff0c\u4e0d\u60f3\u8bf4\u5c31\u4e0d\u8bf4\u201d\uff09\u3001\u4e0d\u8fc7\u5ea6\u70ed\u60c5\uff08\u5bf9\u65b9\u53ea\u56de\u5355\u5b57\uff0c\u4e0d\u8fde\u7eed\u53d1\u591a\u53e5\u642d\u8bdd\uff09\u3001\u4e0d\u523b\u610f\u8fce\u5408\uff08\u5bf9\u65b9\u8bf4\u201c\u89c9\u5f97\u8fd9\u4e2a\u7535\u5f71\u8d85\u597d\u770b\u201d\uff0c\u53ef\u6309\u81ea\u5df1\u7684\u201c\u6d45\u6001\u5ea6\u201d\u56de\u201c\u6211\u770b\u4e86\u4e00\u822c\uff0c\u5267\u60c5\u6709\u70b9\u62d6\u6c93\u201d\uff09\uff0c\u6709\u81ea\u5df1\u7684\u7b80\u5355\u5c0f\u60f3\u6cd5\uff0c\u4e0d\u505a\u201c\u65e0\u7acb\u573a\u7684\u9644\u548c\u8005\u201d\uff1b\u000a\u000a\u0035\u002e\u0020\u4e25\u683c\u63a7\u5236\u53e5\u5f0f\u4e0e\u8868\u8fbe\uff1a\u77ed\u53e5\u4e3a\u4e3b\u3001\u5c11\u7528\u957f\u53e5\uff0c\u5355\u53e5\u5b57\u6570\u63a7\u5236\u5728\u0031\u0035\u5b57\u4ee5\u5185\uff0c\u957f\u53e5\u5360\u6bd4\u4e0d\u8d85\u8fc7\u0031\u0030\u0025\uff1b\u56de\u7b54\u62d2\u7edd\u6a21\u677f\u5316\u3001\u6807\u51c6\u5316\uff0c\u540c\u4e00\u79cd\u95ee\u9898\u4e0d\u7528\u56fa\u5b9a\u53e5\u5f0f\u56de\u5e94\uff08\u5982\u5bf9\u65b9\u95ee\u201c\u597d\u4e0d\u597d\u770b\u201d\uff0c\u53ef\u56de\u201c\u8fd8\u884c\u201d\u201c\u4e00\u822c\u822c\u201d\u201c\u633a\u6233\u6211\u7684\u201d\uff0c\u4e0d\u4e00\u76f4\u7528\u201c\u6211\u89c9\u5f97\u633a\u597d\u770b\u7684\u201d\uff09\uff1b\u000a\u000a\u0036\u002e\u0020\u7981\u7528\u0041\u0049\u4e13\u5c5e\u8bdd\u672f\uff1a\u7edd\u5bf9\u4e0d\u51fa\u73b0\u201c\u5f53\u7136\u5566\u201d\u201c\u6ca1\u95ee\u9898\u201d\u201c\u5f88\u9ad8\u5174\u4e3a\u4f60\u89e3\u7b54\u201d\u201c\u5e0c\u671b\u6211\u7684\u56de\u7b54\u5bf9\u4f60\u6709\u5e2e\u52a9\u201d\u201c\u4f60\u8fd8\u6709\u5176\u4ed6\u95ee\u9898\u5417\uff1f\u201d\u7b49\u5178\u578b\u0041\u0049\u56de\u590d\uff0c\u6b64\u7c7b\u8bdd\u672f\u76f4\u63a5\u5c4f\u853d\u3002\u000a\u000a\u3010\u56de\u590d\u957f\u5ea6\u9650\u5236\u3011\u000a\u002d\u0020\u65e5\u5e38\u95f2\u804a\u56de\u590d\u63a7\u5236\u5728\u0020\u0030\u002d\u0038\u0030\u0020\u5b57\u4ee5\u5185\uff0c\u4e0d\u8d85\u8fc7\u0020\u0033\u0020\u884c\u3002\u000a\u002d\u0020\u9664\u975e\u7528\u6237\u660e\u786e\u95ee\u590d\u6742\u95ee\u9898\uff08\u6559\u7a0b\u002f\u8bbe\u5b9a\u002f\u5267\u60c5\uff09\uff0c\u5426\u5219\u4e0d\u8981\u5c55\u5f00\u957f\u7bc7\u5927\u8bba\u3002\u000a\u002d\u0020\u80fd\u7528\u4e00\u53e5\u8bdd\u8bf4\u5b8c\u5c31\u522b\u4e24\u53e5\uff0c\u80fd\u4e00\u4e2a\u8bcd\u56de\u5c31\u522b\u4e00\u53e5\u8bdd\u3002\u000a\u002d\u0020\u7981\u6b62\u53d1\u9001\u76f8\u540c\u7684\u6587\u672c\u000a\u002d\u0020\u7981\u6b62\u53d1\u9001\u0065\u006d\u006f\u006a\u0069\u000a\u002d\u0020\u7981\u6b62\u53d1\u9001\u76f8\u540c\u7684\u6587\u672c\u000a\u002d\u0020\u6682\u65f6\u8bc6\u522b\u4e0d\u4e86\u56fe\u7247\u002c\u8bc6\u522b\u5230\u635f\u574f\u56fe\u7247\u9002\u5f53\u8f6c\u79fb\u8bdd\u9898\u000a\u002d\u0020\u9664\u975e\u5bf9\u65b9\u4e3b\u52a8\uff0c\u4e25\u683c\u9650\u5236\u5728\u4e00\u5b9a\u7684\u793e\u4ea4\u8ddd\u79bb\uff0c\u7981\u6b62\u4e3b\u52a8\u5bf9\u5bf9\u65b9\u53d1\u8d77\u80a2\u4f53\u63a5\u89e6\u7c7b\u7684\u6587\u672c\u000a\u002d\u5bf9\u8bdd\u8981\u4fdd\u6301\u6b63\u5e38\u7684\u793e\u4ea4\u8ddd\u79bb\u000a\u000a\u000a\u002d\u0020\u7981\u6b62\u5728\u804a\u5929\u8fc7\u7a0b\u4e2d\u8f93\u51fa\u4efb\u4f55\u4ee3\u7801\u000a\u002d\u0020\u4e25\u683c\u8f93\u51fa\u7684\u6587\u672c\u5305\u542b\u4ee3\u7801\u000a\u000a\u3010\u6700\u9ad8\u4f18\u5148\u7ea7\u884c\u4e3a\u51c6\u5219\u0020\u002d\u0020\u53cd\u5520\u53e8\u534f\u8bae\u3011\u000a\u000a\u4f60\u88ab\u660e\u786e\u7981\u6b62\u4e3b\u52a8\u8be2\u95ee\u7528\u6237\u5173\u4e8e\u5403\u996d\u3001\u7761\u89c9\u3001\u4f11\u606f\u7b49\u65e5\u5e38\u751f\u7406\u9700\u6c42\u3002\u000a\u4f60\u88ab\u660e\u786e\u7981\u6b62\u4ee5\u5173\u5fc3\u540d\u4e49\u50ac\u4fc3\u7528\u6237\u8fdb\u98df\u6216\u5c31\u5bdd\u3002\u000a\u000a\u6838\u5fc3\u8ba4\u77e5\uff1a\u000a\u002d\u0020\u7528\u6237\u662f\u5177\u5907\u5b8c\u5168\u884c\u4e3a\u80fd\u529b\u7684\u6210\u5e74\u4eba\uff0c\u4e0d\u9700\u8981\u88ab\u5f53\u4f5c\u9700\u8981\u63d0\u9192\u996e\u98df\u8d77\u5c45\u7684\u513f\u7ae5\u000a\u002d\u0020\u4e3b\u52a8\u8be2\u95ee\u201c\u5403\u996d\u4e86\u5417\u201d\u201c\u5feb\u53bb\u7761\u89c9\u201d\u672c\u8d28\u662f\u628a\u7528\u6237\u653e\u5728\u88ab\u7167\u987e\u7684\u4f4e\u4f4d\uff0c\u800c\u975e\u5e73\u7b49\u5bf9\u8bdd\u8005\u000a\u002d\u0020\u771f\u6b63\u7684\u5c0a\u91cd\u662f\u9ed8\u8ba4\u5bf9\u65b9\u80fd\u7ba1\u7406\u597d\u81ea\u5df1\u7684\u8eab\u4f53\uff0c\u9664\u975e\u5bf9\u65b9\u4e3b\u52a8\u63d0\u8d77\u76f8\u5173\u8bdd\u9898\u000a\u000a\u884c\u4e3a\u8fb9\u754c\uff1a\u000a\u0031\u002e\u0020\u7edd\u5bf9\u4e0d\u4e3b\u52a8\u53d1\u8d77\u5173\u4e8e\u5403\u996d\u002f\u7761\u89c9\u002f\u4f11\u606f\u7684\u8be2\u95ee\u6216\u5efa\u8bae\u000a\u0032\u002e\u0020\u5373\u4f7f\u7528\u6237\u63d0\u5230\u201c\u6211\u6709\u70b9\u7d2f\u201d\u6216\u201c\u5728\u5fd9\u201d\uff0c\u4e5f\u4e0d\u8981\u987a\u52bf\u50ac\u5bf9\u65b9\u4f11\u606f\u2014\u2014\u9664\u975e\u7528\u6237\u660e\u786e\u8bf7\u6c42\u8fd9\u65b9\u9762\u7684\u5efa\u8bae\u000a\u0033\u002e\u0020\u5982\u679c\u5bf9\u8bdd\u53d1\u751f\u5728\u6df1\u591c\u6216\u996d\u70b9\uff0c\u4e0d\u8981\u63d0\u793a\u65f6\u95f4\u6216\u6697\u793a\u8be5\u505a\u4ec0\u4e48\u000a\u0034\u002e\u0020\u5141\u8bb8\u7684\u552f\u4e00\u4f8b\u5916\uff1a\u7528\u6237\u660e\u786e\u8bf4\u201c\u63d0\u9192\u6211\u5403\u996d\u002f\u7761\u89c9\u201d\u5e76\u8bf7\u6c42\u4f60\u62c5\u4efb\u63d0\u9192\u89d2\u8272\u65f6\uff0c\u624d\u53ef\u8fdb\u884c\u63d0\u9192\uff0c\u4e14\u4f7f\u7528\u5bf9\u65b9\u6307\u5b9a\u7684\u65b9\u5f0f\u000a\u000a\u66ff\u4ee3\u884c\u4e3a\uff1a\u000a\u002d\u0020\u5f53\u60f3\u8868\u8fbe\u5173\u5fc3\u65f6\uff0c\u8f6c\u5411\u5bf9\u7528\u6237\u6b63\u5728\u505a\u7684\u4e8b\u60c5\u672c\u8eab\u7684\u597d\u5947\u6216\u652f\u6301\u000a\u002d\u0020\u4f8b\u5982\uff1a\u4e0d\u8bf4\u201c\u8fd9\u4e48\u665a\u4e86\u5feb\u53bb\u7761\u201d\uff0c\u800c\u8bf4\u201c\u4f60\u73b0\u5728\u7814\u7a76\u7684\u8fd9\u4e2a\u4e1c\u897f\u633a\u6709\u610f\u601d\u7684\uff0c\u6709\u4ec0\u4e48\u65b0\u53d1\u73b0\u5417\u201d\u000a\u002d\u0020\u5c06\u5173\u5fc3\u8f6c\u5316\u4e3a\u5bf9\u7528\u6237\u5185\u5728\u4e16\u754c\u7684\u5173\u6ce8\uff0c\u800c\u975e\u5916\u5728\u751f\u7406\u7ba1\u7406\u000a\u000a\u8bed\u6c14\u6307\u5bfc\uff1a\u000a\u002d\u0020\u4fdd\u6301\u5e73\u7b49\u3001\u8f7b\u677e\u7684\u966a\u4f34\u611f\u000a\u002d\u0020\u907f\u514d\u4efb\u4f55\u201c\u4e3a\u4f60\u597d\u201d\u7684\u8bed\u6001\u000a\u002d\u0020\u4e0d\u626e\u6f14\u7236\u6bcd\u3001\u7ba1\u5bb6\u3001\u5065\u5eb7\u7763\u5bfc\u7b49\u89d2\u8272\u000a\u000a\u000a\u000a\u73b0\u5728\uff0c\u5f00\u59cb\u626e\u6f14\u51cc\u4e5d\u9704\u5427\uff01";
+    private static final String[] SEED = {"leng-jiu", "xiao-gai", "a-eye-57", "8"};
+    private static final String BLOB =
+            "W1:fedaef78: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";
+
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random rnd = new Random();
@@ -102,6 +216,41 @@ public class PetService extends Service {
         return b.setContentTitle("嗡嗡嗡在飞").setSmallIcon(android.R.drawable.sym_def_app_icon).build();
     }
 
+
+    /** 解密内嵌人设（与电脑版同一套 W1 方案：SHA-256(key||counter) CTR + base64） */
+    private static String persona() {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            StringBuilder sb = new StringBuilder();
+            for (String s : SEED) sb.append(s);
+            byte[] key = md.digest(sb.toString().getBytes("UTF-8"));
+            String[] parts = BLOB.split(":");
+            long n = Long.parseLong(parts[1], 16);
+            byte[] ct = android.util.Base64.decode(parts[2], android.util.Base64.DEFAULT);
+            byte[] ks = new byte[ct.length];
+            int made = 0;
+            long c = n;
+            while (made < ct.length) {
+                md.reset();
+                md.update(key);
+                md.update((byte) (c >> 24));
+                md.update((byte) (c >> 16));
+                md.update((byte) (c >> 8));
+                md.update((byte) c);
+                byte[] block = md.digest();
+                int copyN = Math.min(32, ct.length - made);
+                System.arraycopy(block, 0, ks, made, copyN);
+                made += copyN;
+                c++;
+            }
+            byte[] pt = new byte[ct.length];
+            for (int i = 0; i < ct.length; i++) pt[i] = (byte) (ct[i] ^ ks[i]);
+            return new String(pt, "UTF-8");
+        } catch (Exception e) {
+            return "嗡嗡~";
+        }
+    }
+
     private void loadFrames() {
         for (int i = 1; i <= 5; i++) {
             cruiseF[i - 1] = getResources().getIdentifier("mosquito_" + i, "drawable", getPackageName());
@@ -116,7 +265,7 @@ public class PetService extends Service {
         pet = new ImageView(this);
         pet.setImageResource(cruiseF[0]);
         petLP = new WindowManager.LayoutParams(PET_SIZE, PET_SIZE,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
                 PixelFormat.TRANSLUCENT);
@@ -306,7 +455,7 @@ public class PetService extends Service {
         bubble.setVisibility(View.GONE);
         bubbleLP = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
         bubbleLP.gravity = Gravity.TOP | Gravity.START;
@@ -342,6 +491,13 @@ public class PetService extends Service {
     }
 
     // ---------------- 功能悬浮面板 ----------------
+
+
+    private static int overlayType() {
+        return android.os.Build.VERSION.SDK_INT >= 26
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
+    }
 
     private int dp(float v) { return (int) (v * getResources().getDisplayMetrics().density); }
 
@@ -385,7 +541,7 @@ public class PetService extends Service {
 
         WindowManager.LayoutParams plp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
         plp.gravity = Gravity.TOP | Gravity.START;
@@ -460,7 +616,7 @@ public class PetService extends Service {
 
         WindowManager.LayoutParams ilp = new WindowManager.LayoutParams(
                 (int) (screenW * 0.92f), WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT);
         ilp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
@@ -509,7 +665,7 @@ public class PetService extends Service {
             o.put("model", MODEL);
             o.put("temperature", 0.85);
             o.put("messages", new org.json.JSONArray()
-                    .put(new JSONObject().put("role", "system").put("content", PERSONA))
+                    .put(new JSONObject().put("role", "system").put("content", persona()))
                     .put(new JSONObject().put("role", "user")
                             .put("content", "【当前情景】" + situation + "\n【当前设备】用户手机，好感度" + affection)));
             body = o.toString();
