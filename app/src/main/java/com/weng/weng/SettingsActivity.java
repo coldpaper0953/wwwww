@@ -22,6 +22,7 @@ public class SettingsActivity extends Activity {
     private ScrollView scroller;
     private android.app.AlertDialog pickDlg;
     private EditText apiBaseField, apiKeyField, apiModelField;
+    private TextView emoLine, feedLine;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -134,13 +135,26 @@ public class SettingsActivity extends Activity {
         affVal.setTypeface(Typeface.DEFAULT_BOLD);
         affVal.setTextColor(Color.parseColor("#111111"));
         affVal.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams avp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        LinearLayout.LayoutParams avp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         affRow.addView(affVal, avp);
         TextView editAff = button("✏️ 修改");
         editAff.setOnClickListener(v -> editAffectionDialog());
         affRow.addView(editAff);
         petCard.addView(affRow);
         petCard.addView(gap(8));
+
+        // 状态卡：称号/情绪/饲养
+        TextView statusLine = small("#555555", Gravity.LEFT);
+        statusLine.setText("❤️ " + com.weng.weng.DataStore.titleFor(com.weng.weng.DataStore.getAff())
+                + " · 今日好感 " + com.weng.weng.DataStore.sp().getInt("dailyAff", 0) + "/50");
+        statusLine.setPadding(dp(4), 0, 0, dp(4));
+        petCard.addView(statusLine);
+        TextView emoLine = small("#777777", Gravity.LEFT);
+        emoLine.setPadding(dp(4), dp(2), 0, dp(4));
+        petCard.addView(emoLine);
+        TextView feedLine = small("#777777", Gravity.LEFT);
+        feedLine.setPadding(dp(4), dp(2), 0, dp(4));
+        petCard.addView(feedLine);
 
         petCard.addView(rowLabel("模式"));
         LinearLayout modeRow = new LinearLayout(this);
@@ -162,6 +176,15 @@ public class SettingsActivity extends Activity {
             }
         });
         modeRow.addView(workBtn);
+        modeRow.addView(gapW(8));
+        TextView feedBtn = button("🩸 献血");
+        feedBtn.setOnClickListener(v -> {
+            if (PetService.instance != null) {
+                PetService.instance.startFeed();
+                refresh();
+            }
+        });
+        modeRow.addView(feedBtn);
         modeRow.addView(gapW(8));
         TextView persona = button("🔒 人设已锁定");
         persona.setOnClickListener(v ->
@@ -423,6 +446,8 @@ public class SettingsActivity extends Activity {
             return;
         }
         affLabel.setText("❤️ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天");
+        if (emoLine != null) emoLine.setText("🧠 " + PetService.instance.emo.describe());
+        if (feedLine != null) feedLine.setText("🩸 " + PetService.instance.feedStatusText());
         verLabel.setText("v" + PetService.instance.curVersion() + (PetService.instance.dnd ? "（勿扰中）" : "") + (PetService.instance.workMode ? "（工作中）" : ""));
         dndBtn.setText(PetService.instance.dnd ? "🌙 勿扰中" : "🌙 勿扰");
         workBtn.setText(PetService.instance.workMode ? "📚 工作中" : "📚 工作");

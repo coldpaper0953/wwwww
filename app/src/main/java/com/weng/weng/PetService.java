@@ -31,9 +31,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
-
 /** 悬浮窗蚊子宠物：形态与电脑版一致（飞在一切界面之上），功能开关做成悬浮面板 */
-public class PetService extends Service {
+public class PetService extends Service implements Flyer.Host {
 
     private static final int PET_SIZE = 96;
     private static final String KEY_API = "sk-mRrMtL6KmIvcTmq4tJvM67KGLij62xcfJfn0DuIeYhP4bD8b";
@@ -192,6 +191,22 @@ public class PetService extends Service {
     public int affection;
     private long lastBubbleAt = 0;
 
+    // ---------------- 阶段1新增：状态机/情绪/饲养 ----------------
+    public final Emotion emo = new Emotion();
+    public Flyer fly;
+    public float petScale = 1f;
+    private long startedAt = 0;
+    private long lastInteractAt = 0;
+    private long lastPetAt = 0;
+    private long lastAiAt = 0;
+    private boolean napping = false;
+    private boolean afkWarned = false;
+    private String lastDominant = null;
+    private float pinchStartDist = 0;
+    private int feedPhase = 0;          // 献血三段式：0无 1俯冲 2盘旋 3叮咬
+    private long feedAt = 0;
+    private float feedX = 0, feedY = 0;
+
     @Override
     public IBinder onBind(Intent i) { return null; }
 
@@ -210,6 +225,12 @@ public class PetService extends Service {
         speedMul = sp.getFloat("speedMul", 1f);
         initApi();
         loadQuotes();
+        DataStore.init(this);
+        emo.load();
+        petScale = DataStore.getFloat("petScale", 1f);
+        fly = new Flyer(this);
+        startedAt = System.currentTimeMillis();
+        lastInteractAt = startedAt;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         DisplayMetrics dm = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(dm);
@@ -224,6 +245,10 @@ public class PetService extends Service {
         handler.post(tickFrame);
         handler.postDelayed(this::firstGreeting, 800);
         handler.postDelayed(this::checkUpdate, 5000);
+        handler.postDelayed(this::metaTick, 30000);
+        handler.postDelayed(this::moodTick, 60000);
+        handler.postDelayed(this::autoStateTick, 12000);
+        handler.postDelayed(this::afkTick, 30000);
     }
 
     // ---------------- 版本检查 + 热更新 ----------------
@@ -410,11 +435,13 @@ public class PetService extends Service {
         pet.setOnTouchListener((v, ev) -> {
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    wakeUpIfNapping();
                     downX = ev.getRawX();
                     downY = ev.getRawY();
                     downAt = System.currentTimeMillis();
                     dragged = false;
                     petted = false;
+                    pinchStartDist = 0;
                     handler.postDelayed(() -> {
                         if (!dragged && System.currentTimeMillis() - downAt >= 650 && !dead) {
                             petted = true;
@@ -429,12 +456,26 @@ public class PetService extends Service {
                         }
                     }, 1560);
                     return true;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // 第二根手指按下：进入捏合缩放模式
+                    if (ev.getPointerCount() == 2) {
+                        pinchStartDist = fingerDist(ev);
+                        dragged = true;   // 捏合不算拖拽/手势
+                    }
+                    return true;
                 case MotionEvent.ACTION_MOVE:
+                    if (ev.getPointerCount() == 2 && pinchStartDist > 0) {
+                        float d = fingerDist(ev);
+                        petScale = Math.max(0.33f, Math.min(2.67f, petScale * (d / pinchStartDist)));
+                        pinchStartDist = d;
+                        applyPetSize();
+                        return true;
+                    }
                     float mx = ev.getRawX(), my = ev.getRawY();
                     if (Math.hypot(mx - downX, my - downY) > 18) {
                         dragged = true;
-                        px = mx - PET_SIZE / 2f;
-                        py = my - PET_SIZE / 2f;
+                        px = mx - curSize() / 2f;
+                        py = my - curSize() / 2f;
                         clampPet();
                         petLP.x = (int) px;
                         petLP.y = (int) py;
@@ -444,12 +485,19 @@ public class PetService extends Service {
                     return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    if (pinchStartDist > 0) {   // 捏合结束：存尺寸
+                        DataStore.putFloat("petScale", petScale);
+                        pinchStartDist = 0;
+                        return true;
+                    }
                     float ux = ev.getRawX(), uy = ev.getRawY();
                     long dur = System.currentTimeMillis() - downAt;
                     float dist = (float) Math.hypot(ux - downX, uy - downY);
                     if (petted || dead || dragged) return true;
+                    lastInteractAt = System.currentTimeMillis();
                     if (dist > 60) {                      // 扔出去
                         state = "falling";
+                        emo.add("生气", 8);
                         showBubble(q("throw"), 1500);
                     } else if (dur < 350) {               // 戳
                         long now = System.currentTimeMillis();
@@ -460,10 +508,25 @@ public class PetService extends Service {
                             smackDead();
                         } else {
                             playEmo(happyF, 1);
-                            showBubble(q("tap"), 1800);
-                            addAffection(1);
-                            aiChat("用户戳了你一下");
+                            emo.add("开心", 6);
+                            showBubble(tapCount == 1 ? "嗯？" : "别闹…", 1800);
+                            awardAff(1);
+                            aiChat(tapCount == 1 ? "用户戳了你一下" : "用户又戳了你一下，这是第 " + tapCount + " 次");
                         }
+                    } else if (dur >= 1500) {             // 长按拥抱
+                        fly.switchTo("sleepy", 300);
+                        playEmo(happyF, 2);
+                        emo.add("开心", 10);
+                        awardAff(3);
+                        aiChat("用户长按着你抱了很久，你假装不在意但其实快睡着了");
+                    } else if (dur >= 500) {              // 温柔摸（0.5-1.5s 无位移松手）
+                        long now = System.currentTimeMillis();
+                        if (now - lastPetAt > 10000) {
+                            lastPetAt = now;
+                            awardAff(1);
+                        }
+                        emo.add("开心", 5);
+                        aiChat("用户温柔地摸了你一会儿");
                     }
                     return true;
             }
@@ -471,11 +534,112 @@ public class PetService extends Service {
         });
     }
 
+    /** 两指间距（捏合缩放用） */
+    private float fingerDist(MotionEvent ev) {
+        float dx = ev.getX(0) - ev.getX(1);
+        float dy = ev.getY(0) - ev.getY(1);
+        return (float) Math.hypot(dx, dy);
+    }
+
+    public int curSize() { return (int) (PET_SIZE * petScale); }
+
+    private void applyPetSize() {
+        petLP.width = curSize();
+        petLP.height = curSize();
+        try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+    }
+
+    /** 好感度入账（每日 50 上限），返回 [实际增加, 是否被截断] */
+    public int[] awardAff(int n) {
+        int prev = DataStore.getAff();
+        int[] r = DataStore.addAff(n);
+        affection = DataStore.getAff();
+        int ms = DataStore.milestoneCrossed(prev, affection);
+        if (ms > 0) {
+            showBubble("✨ 好感 " + ms + " 里程碑达成！称号：" + DataStore.titleFor(affection), 5000);
+            DataStore.setPendingTheater("aff" + ms);
+            aiChat("你和蚊子的好感度刚刚突破 " + ms + "，跨入「" + DataStore.titleFor(affection) + "」阶段，它很感动");
+        }
+        if (r[1] == 1) showBubble("今天的好感已满～明天再来！", 2500);
+        return r;
+    }
+
+    /** 献血入口（设置页调用）：血池为 0 拒绝；三段式叮咬演出 */
+    public void startFeed() {
+        if (dead || feedPhase != 0) return;
+        if (DataStore.getBlood() <= 0.5f) {
+            showBubble("血量还没攒够，等会儿再来～", 3000);
+            return;
+        }
+        feedPhase = 1;
+        feedAt = System.currentTimeMillis();
+        feedX = px;
+        feedY = py;
+        fly.switchTo("dash", 30);
+        showBubble("来咯来咯～", 1200);
+    }
+
+    private void feedTick() {
+        if (feedPhase == 0) return;
+        long t = System.currentTimeMillis() - feedAt;
+        if (feedPhase == 1 && t > 600) {          // 俯冲完→盘旋
+            feedPhase = 2;
+            feedAt = System.currentTimeMillis();
+            fly.switchTo("spiral", 270);
+        } else if (feedPhase == 2 && t > 8000) {  // 盘旋完→叮咬
+            feedPhase = 3;
+            feedAt = System.currentTimeMillis();
+            fly.switchTo("dash", 12);
+        } else if (feedPhase == 3 && t > 400) {   // 叮咬结算
+            feedPhase = 0;
+            boolean picky = rnd.nextInt(100) < 15;
+            boolean crit = rnd.nextInt(100) < 18;
+            if (picky) {
+                showBubble(pick("今天不想吸你的，想去外面觅食～", "哼，姿势不对，改天再来！"), 3500);
+                aiChat("用户要给你献血但你今天挑食不想吸");
+                return;
+            }
+            float blood = Math.min(DataStore.getBlood(), 20f);
+            DataStore.setBlood(DataStore.getBlood() - blood);
+            DataStore.addBloodTotal(blood);
+            float gain = blood * (crit ? 1.0f : 0.5f);
+            DataStore.setSatiety(Math.min(100f, DataStore.getSatiety() + gain));
+            if (crit) {
+                pet.setScaleX(1.45f);
+                pet.setScaleY(1.45f);
+                showBubble("✨这血也太新鲜了！！", 4000);
+                handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1500);
+            } else {
+                pet.setScaleX(1.3f);
+                pet.setScaleY(1.3f);
+                handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1800);
+            }
+            String oldT = DataStore.bloodTitle();
+            showBubble("吸了 " + (int) blood + " 血，饱食度 +" + (int) gain + (crit ? "（暴击！）" : ""), 4000);
+            aiChat(crit
+                    ? "用户献血给你，这次血超新鲜，你暴击吸了双倍"
+                    : "用户献血给你，你吸了一口");
+            // 跨献血称号档
+            float total = DataStore.getBloodTotal();
+            float[] lines = {250, 600, 1500, 3000};
+            for (float l : lines) {
+                if (total >= l && total - blood < l) {
+                    showBubble("🎖️ 献血称号晋升：" + DataStore.bloodTitle(), 5000);
+                }
+            }
+            // 吃撑检测
+            if (DataStore.getSatiety() > 90) {
+                DataStore.setStuffedUntil(System.currentTimeMillis() + 150000L);
+            }
+        }
+    }
+
     private void clampPet() {
+        int sz = curSize();
         if (px < 0) { px = 0; vx = Math.abs(vx); }
-        if (px > screenW - PET_SIZE) { px = screenW - PET_SIZE; vx = -Math.abs(vx); }
+        if (px > screenW - sz) { px = screenW - sz; vx = -Math.abs(vx); }
         if (py < 40) { py = 40; vy = Math.abs(vy); }
-        if (py > screenH - PET_SIZE - 60) { py = screenH - PET_SIZE - 60; vy = -Math.abs(vy); }
+        if (py > screenH - sz - 60) { py = screenH - sz - 60; vy = -Math.abs(vy); }
     }
 
     private void randomizeVelocity() {
@@ -490,27 +654,39 @@ public class PetService extends Service {
         public void run() {
             handler.postDelayed(this, 30);
             if (dead) return;
-            if (state.equals("cruise") && !dragged && !dnd && !workMode) {
-                px += vx * speedMul;
-                py += vy * speedMul;
-                float oldVx = vx, oldVy = vy;
-                clampPet();
-                if (vx != oldVx || vy != oldVy) randomizeVelocity();
+            feedTick();
+            if (napping) return;
+            if (workMode) return;   // 工作模式悬停不动
+            if (dnd) {              // 勿扰：安静沿边巡逻
+                if (!fly.state.equals("edge_walk")) fly.switchTo("edge_walk", 0);
+                fly.ax = fly.ax == 0 && fly.lastSwitchAt == 0 ? 0 : fly.ax;
+                fly.step();
                 petLP.x = (int) px;
                 petLP.y = (int) py;
                 try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
-                if (bubble.getVisibility() == View.VISIBLE) placeBubble();
-            } else if (state.equals("falling")) {
+                return;
+            }
+            if (state.equals("falling")) {
                 py += 18;
-                if (py >= screenH - PET_SIZE - 60) {
-                    py = screenH - PET_SIZE - 60;
+                if (py >= screenH - curSize() - 60) {
+                    py = screenH - curSize() - 60;
                     state = "cruise";
-                    randomizeVelocity();
-                    handler.postDelayed(() -> aiChat("用户刚才把你狠狠甩了出去"), 300);
+                    fly.switchTo("dizzy", 60);
+                    handler.postDelayed(() -> aiChat("用户刚才把你狠狠甩了出去，你摔得头晕眼花"), 300);
                 }
                 petLP.y = (int) py;
                 try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                return;
             }
+            // 常规：Flyer 状态机驱动（falling 由上面处理；flyer 的 cruise 内含撞边反弹）
+            if (state.equals("falling")) return;
+            fly.step();
+            // 状态同步（snapping 等剧情态存 state，运动态存 fly.state）
+            if (!state.equals("snapping") && !state.equals("stunned")) state = fly.state;
+            petLP.x = (int) px;
+            petLP.y = (int) py;
+            try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+            if (bubble.getVisibility() == View.VISIBLE) placeBubble();
         }
     };
 
@@ -557,11 +733,14 @@ public class PetService extends Service {
 
     private void smackDead() {
         dead = true;
+        emo.add("生气", 15);
+        Emotion.record(emo.dominant());
         hideBubble();
         showBubble("你把我拍扁了！！！", 1500);
         handler.postDelayed(() -> {
             dead = false;
             playEmo(sadF, 2);
+            emo.add("孤独", 8);
             showBubble(q("revive"), 2500);
             aiChat("用户快速连点三下把你拍扁了，你复活后很委屈");
         }, 2000);
@@ -569,7 +748,12 @@ public class PetService extends Service {
 
     private void petHead() {
         playEmo(happyF, 1);
-        addAffection(2);
+        emo.add("开心", 10);
+        long now = System.currentTimeMillis();
+        if (now - lastPetAt > 10000) {
+            lastPetAt = now;
+            awardAff(1);
+        }
         aiChat("用户长时间温柔地摸你的头");
     }
 
@@ -651,6 +835,151 @@ public class PetService extends Service {
         return t;
     }
 
+    // ---------------- 阶段1新增：周期任务 ----------------
+
+    /** 30s：饱食度下降/血池回复/吃撑结束/打嗝/饥饿催血 */
+    private void metaTick() {
+        handler.postDelayed(this::metaTick, 30000);
+        float sat = DataStore.getSatiety();
+        float blood = DataStore.getBlood();
+        boolean night = isNight();
+        // 饱食度：夜间掉 1.6 倍
+        sat -= night ? 0.09f : 0.055f;
+        // 血池被动回复：夜间 0.8 倍
+        blood += night ? 0.05f : 0.065f;
+        DataStore.setSatiety(sat);
+        DataStore.setBlood(Math.min(100f, blood));
+        // 吃撑打嗝
+        if (System.currentTimeMillis() < DataStore.getStuffedUntil() && rnd.nextInt(100) < 25) {
+            showBubble("呃……嗝……撑死了……", 2000);
+            if (fly.state.equals("cruise")) fly.switchTo("drift", 150);
+        }
+        // 饥饿催血
+        if (sat < 35 && !dnd && !dead && rnd.nextInt(100) < 40) {
+            showBubble(sat < 15 ? "😩 饿扁了…快献血啦…" : "🍽️ 有点饿了，献血吗？", 3500);
+            if (fly.state.equals("cruise")) fly.switchTo("sleepy", 200);
+        }
+        // 起床气/小睡结束
+        if (napping && System.currentTimeMillis() > napUntil) {
+            napping = false;
+            showBubble("（揉眼睛）唔……睡饱了", 2500);
+        }
+        emo.save();
+    }
+
+    private long napUntil = 0;
+
+    private boolean isNight() {
+        int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        return h >= 22 || h < 7;
+    }
+
+    /** 夜间小睡：22:00-次日 7:00，启动 5 分钟后才有资格，随机 1-5 分钟 */
+    private void maybeNap() {
+        if (napping || dead || dnd || workMode) return;
+        if (!isNight()) return;
+        if (System.currentTimeMillis() - startedAt < 300000) return;
+        if (rnd.nextInt(100) < 30) {
+            napping = true;
+            napUntil = System.currentTimeMillis() + (60000L * (1 + rnd.nextInt(5)));
+            fly.switchTo("corner_rest", 100000);
+            showBubble(q("sleep"), 4000);
+        }
+    }
+
+    /** 点醒打盹中的蚊子→起床气 */
+    private void wakeUpIfNapping() {
+        if (napping) {
+            napping = false;
+            emo.add("生气", 12);
+            Emotion.record("生气");
+            showBubble("干嘛啦！人家正睡得香！", 3000);
+            aiChat("用户把你从睡梦中戳醒，你起床气很重");
+            fly.switchTo("dizzy", 50);
+        }
+    }
+
+    /** 60s：情绪漂移+心情记录+主导切换播表情 */
+    private void moodTick() {
+        handler.postDelayed(this::moodTick, 60000);
+        long mins = (System.currentTimeMillis() - lastInteractAt) / 60000L;
+        emo.drift(mins);
+        String d = emo.dominant();
+        if (d != null && !d.equals(lastDominant)) {
+            lastDominant = d;
+            Emotion.record(d);
+            if (d.equals("开心")) playEmo(happyF, 1);
+            else if (d.equals("生气") || d.equals("孤独")) playEmo(sadF, 1);
+        } else if (d == null) {
+            lastDominant = null;
+        }
+        emo.save();
+        maybeNap();
+    }
+
+    /** 12s：cruise 时按概率切特殊飞行状态（对齐电脑版行为多样性） */
+    private void autoStateTick() {
+        handler.postDelayed(this::autoStateTick, 12000);
+        if (dead || dnd || workMode || napping || feedPhase != 0) return;
+        if (!fly.state.equals("cruise")) return;
+        int p = rnd.nextInt(100);
+        if (p < 55) return;   // 大部分时间保持巡航
+        String[] states = {"dash", "zigzag", "edge_walk", "corner_rest", "drift", "peek",
+                "spiral", "window_perch", "text_crawl", "idle_fidget", "hover_jitter",
+                "loop", "dive_climb", "figure_eight", "butterfly"};
+        int frames = 60 + rnd.nextInt(240);
+        if (fly.state.equals("edge_walk")) frames = 0;
+        fly.switchTo(states[rnd.nextInt(states.length)], frames);
+    }
+
+    /** 30s：挂机检测——90s 无互动发牢骚，20 分钟问是不是睡着了 */
+    private void afkTick() {
+        handler.postDelayed(this::afkTick, 30000);
+        if (dnd || napping || dead) return;
+        long idle = System.currentTimeMillis() - lastInteractAt;
+        if (idle > 20 * 60000L) {
+            if (!afkWarned) {
+                afkWarned = true;
+                showBubble("喂……你是不是睡着了？都不理我……", 5000);
+                emo.add("孤独", 10);
+                aiChat("用户已经 20 分钟没有任何操作，你觉得他睡着了，有点失落");
+            }
+        } else if (idle > 90 * 1000L) {
+            afkWarned = false;
+            showBubble("嗡嗡！！我在这儿呢！看看我！", 4000);
+            fly.switchTo("dash", 40);
+        }
+    }
+
+    // ---------------- Flyer.Host 实现 ----------------
+
+    @Override
+    public float px() { return px; }
+
+    @Override
+    public float py() { return py; }
+
+    @Override
+    public void setPos(float x, float y) { px = x; py = y; }
+
+    @Override
+    public int screenW() { return screenW; }
+
+    @Override
+    public int screenH() { return screenH; }
+
+    @Override
+    public int size() { return curSize(); }
+
+    @Override
+    public float speedMul() { return speedMul; }
+
+    @Override
+    public Random rnd() { return rnd; }
+
+    @Override
+    public Handler handler() { return handler; }
+
     // ---------------- App 内设置窗口相关 ----------------
 
     public void openSettings() {
@@ -660,6 +989,7 @@ public class PetService extends Service {
     }
 
     public void userChat(String text) {
+        lastInteractAt = System.currentTimeMillis();
         logChat("你", text);
         aiChat("用户对你说：" + text);
     }
@@ -673,7 +1003,11 @@ public class PetService extends Service {
 
     public void setAffection(int v) {
         affection = Math.max(0, v);
-        sp.edit().putInt("aff", affection).apply();
+        DataStore.setAffRaw(affection);
+    }
+
+    public void applyScaleNow() {
+        applyPetSize();
     }
 
     private void initApi() {
@@ -843,11 +1177,26 @@ public class PetService extends Service {
 
     public void toggleDnd() {
         dnd = !dnd;
-        showBubble(dnd ? q("sleep") : "睡饱啦！继续飞～", 2000);
+        if (dnd) {
+            fly.switchTo("edge_walk", 0);
+            showBubble("开会呢/看书呢，我先不打扰了 🤫", 2000);
+        } else {
+            fly.switchTo("cruise", 0);
+            showBubble("我回来啦！继续飞～", 2000);
+        }
     }
 
     public int daysCount() {
         return (int) ((System.currentTimeMillis() - firstAt) / 86400000L) + 1;
+    }
+
+    public String relationTitle() {
+        return DataStore.titleFor(DataStore.getAff());
+    }
+
+    public String feedStatusText() {
+        return "饱食度 " + (int) DataStore.getSatiety() + "/100 · 血池 " + (int) DataStore.getBlood()
+                + "/100 · 累计献血 " + (int) DataStore.getBloodTotal() + "（" + DataStore.bloodTitle() + "）";
     }
 
     public void logChat(String who, String text) {
@@ -868,8 +1217,8 @@ public class PetService extends Service {
     // ---------------- 好感度 / 台词 ----------------
 
     private void addAffection(int n) {
-        affection += n;
-        sp.edit().putInt("aff", affection).apply();
+        // 旧路径仅内部兼容；新代码一律走 awardAff（含每日上限与里程碑）
+        awardAff(n);
     }
 
     private String pick(String... a) { return a[rnd.nextInt(a.length)]; }
@@ -882,6 +1231,7 @@ public class PetService extends Service {
     private void aiChat(String situation) {
         if (pending) return;
         pending = true;
+        lastAiAt = System.currentTimeMillis();
         showBubble("对方正在回应中...", 60000);
         final String body;
         try {
@@ -891,7 +1241,9 @@ public class PetService extends Service {
             o.put("messages", new org.json.JSONArray()
                     .put(new JSONObject().put("role", "system").put("content", persona()))
                     .put(new JSONObject().put("role", "user")
-                            .put("content", "【当前情景】" + situation + "\n【当前设备】用户手机，好感度" + affection)));
+                            .put("content", "【当前情景】" + situation + "\n【当前设备】用户手机\n【好感度】" + DataStore.getAff()
+                                    + "（" + DataStore.titleFor(DataStore.getAff()) + "）\n【情绪】" + emo.describe()
+                                    + "\n【饲养】" + feedStatusText() + "\n【饲养天数】第 " + daysCount() + " 天")));
             body = o.toString();
         } catch (Exception e) {
             pending = false;
@@ -945,6 +1297,7 @@ public class PetService extends Service {
     public void onDestroy() {
         instance = null;
         handler.removeCallbacksAndMessages(null);
+        emo.save();
         for (View v : new View[]{pet, bubble}) {
             if (v != null) try { wm.removeView(v); } catch (Exception ignored) {}
         }
