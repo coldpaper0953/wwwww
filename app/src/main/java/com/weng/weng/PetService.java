@@ -177,13 +177,14 @@ public class PetService extends Service {
     private long lastTapAt = 0, downAt = 0;
     private float downX, downY;
     private boolean dragged, petted;
-    private boolean dnd = false, pending = false;
+    public boolean dnd = false;
+    private boolean pending;
     private String updateUrl = null;
 
     public static PetService instance;
     private long firstAt = 0;
     private final java.util.List<String> chatLog = java.util.Collections.synchronizedList(new java.util.ArrayList<String>());
-    private int affection;
+    public int affection;
     private long lastBubbleAt = 0;
 
     @Override
