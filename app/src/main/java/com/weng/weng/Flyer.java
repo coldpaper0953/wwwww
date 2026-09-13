@@ -28,6 +28,8 @@ public class Flyer {
 
         float glideFriction();
 
+        void onBounce();
+
         Random rnd();
 
         Handler handler();
@@ -81,11 +83,13 @@ public class Flyer {
         float w = h.screenW() - h.size();
         float hh = h.screenH() - h.size() - 60;
         float x = h.px(), y = h.py();
-        if (x < 0) { x = 0; vx = Math.abs(vx); }
-        if (x > w) { x = w; vx = -Math.abs(vx); }
-        if (y < 40) { y = 40; vy = Math.abs(vy); }
-        if (y > hh) { y = hh; vy = -Math.abs(vy); }
+        boolean bounced = false;
+        if (x < 0) { x = 0; vx = Math.abs(vx); bounced = true; }
+        if (x > w) { x = w; vx = -Math.abs(vx); bounced = true; }
+        if (y < 40) { y = 40; vy = Math.abs(vy); bounced = true; }
+        if (y > hh) { y = hh; vy = -Math.abs(vy); bounced = true; }
         h.setPos(x, y);
+        if (bounced) h.onBounce();
     }
 
     /** 每 tick 调用（约 30ms 一次），返回是否应重绘 */
@@ -103,10 +107,10 @@ public class Flyer {
                 vx *= f;
                 vy *= f;
                 h.setPos(x, y);
-                if (x < 0) { h.setPos(0, y); vx = -vx * 0.5f; }
-                if (x > W - h.size()) { h.setPos(W - h.size(), y); vx = -vx * 0.5f; }
-                if (y < 40) { h.setPos(x, 40); vy = -vy * 0.5f; }
-                if (y > H) { h.setPos(x, H); vy = -vy * 0.5f; }
+                if (x < 0) { h.setPos(0, y); vx = -vx * 0.5f; h.onBounce(); }
+                if (x > W - h.size()) { h.setPos(W - h.size(), y); vx = -vx * 0.5f; h.onBounce(); }
+                if (y < 40) { h.setPos(x, 40); vy = -vy * 0.5f; h.onBounce(); }
+                if (y > H) { h.setPos(x, H); vy = -vy * 0.5f; h.onBounce(); }
                 if (Math.abs(vx) < 0.15f && Math.abs(vy) < 0.15f) {
                     switchTo("cruise", 0);
                     randomizeVelocity();

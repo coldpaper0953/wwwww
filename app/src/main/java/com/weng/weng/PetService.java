@@ -218,13 +218,9 @@ public class PetService extends Service implements Flyer.Host {
     // 时间感知：时段名+跨时段问候
     private String lastPeriod = null;
 
-    // 屏幕边缘小拉手 + 悬浮聊天框
+    // 屏幕边缘小拉手
     private TextView tabHandle;
     private WindowManager.LayoutParams tabLP;
-    private LinearLayout chatPanel;
-    private WindowManager.LayoutParams chatLP;
-    private EditText chatIn;
-    private TextView chatStatus;
 
     // ---------------- 阶段5：整蛊模式 ----------------
     public PrankEngine prank = null;
@@ -675,6 +671,10 @@ public class PetService extends Service implements Flyer.Host {
             float gain = blood * (crit ? 1.0f : 0.5f);
             DataStore.setSatiety(Math.min(100f, DataStore.getSatiety() + gain));
             if (crit) {
+                // 暴击金光：金色高亮持续 1.5s（glowUntil 挡住 tickFrame 清滤镜）+ 膨胀
+                glowUntil = System.currentTimeMillis() + 1500;
+                pet.setColorFilter(new android.graphics.PorterDuffColorFilter(
+                        Color.rgb(255, 200, 0), android.graphics.PorterDuff.Mode.SRC_ATOP));
                 pet.setScaleX(1.45f);
                 pet.setScaleY(1.45f);
                 showBubble("✨这血也太新鲜了！！", 4000);
@@ -734,6 +734,7 @@ public class PetService extends Service implements Flyer.Host {
                 petLP.x = (int) px;
                 petLP.y = (int) py;
                 try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                if (bubble.getVisibility() == View.VISIBLE) placeBubble();
                 return;
             }
             if (state.equals("falling")) {
@@ -746,6 +747,7 @@ public class PetService extends Service implements Flyer.Host {
                 }
                 petLP.y = (int) py;
                 try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                if (bubble.getVisibility() == View.VISIBLE) placeBubble();
                 return;
             }
             // 常规：Flyer 状态机驱动（falling 由上面处理；flyer 的 cruise 内含撞边反弹）
@@ -764,15 +766,17 @@ public class PetService extends Service implements Flyer.Host {
         @Override
         public void run() {
             handler.postDelayed(this, 100);
+            // 特效期间（暴击金光/专注黄光）不清滤镜，动画帧照常换
+            if (System.currentTimeMillis() >= glowUntil) {
+                pet.setColorFilter(null);
+            }
             if (dead) {
                 pet.setImageResource(deadRes != 0 ? deadRes : cruiseF[0]);
-                pet.setColorFilter(null);
                 return;
             }
             if (playingEmo) {
                 int[] set = (emoSet == SET_HAPPY) ? happyF : sadF;
                 pet.setImageResource(set[emoIdx]);
-                pet.setColorFilter(null);
                 emoIdx++;
                 if (emoIdx >= 5) {
                     if (emoLoops > 0) { emoLoops--; emoIdx = 0; }
@@ -780,7 +784,6 @@ public class PetService extends Service implements Flyer.Host {
                 }
                 return;
             }
-            pet.setColorFilter(null);
             if (workMode) {
                 frameIdx = (frameIdx + 1) % 5;
                 pet.setImageResource(workF[frameIdx]);
@@ -1052,6 +1055,7 @@ public class PetService extends Service implements Flyer.Host {
     private void flashGlow() {
         final android.graphics.PorterDuffColorFilter yellow =
                 new android.graphics.PorterDuffColorFilter(Color.YELLOW, android.graphics.PorterDuff.Mode.SRC_ATOP);
+        glowUntil = System.currentTimeMillis() + 3500;
         pet.setColorFilter(yellow);
         for (int i = 1; i <= 3; i++) {
             handler.postDelayed(() -> {
@@ -1321,6 +1325,26 @@ public class PetService extends Service implements Flyer.Host {
     @Override
     public float glideFriction() { return frictionFor(glideLevel()); }
 
+    /** 撞屏幕边缘：挤压回弹动画（朝反弹方向压扁再弹开）+ 偶尔冒撞墙台词 */
+    @Override
+    public void onBounce() {
+        if (dead || System.currentTimeMillis() < bounceAnimUntil) return;
+        bounceAnimUntil = System.currentTimeMillis() + 450;
+        // 反弹方向压扁：水平反弹→横向压扁，垂直反弹→纵向压扁
+        boolean horizontal = Math.abs(vx) > 0.01f && (px <= 1 || px >= screenW - curSize() - 1);
+        float sx = horizontal ? 0.55f : 1.25f;
+        float sy = horizontal ? 1.25f : 0.55f;
+        pet.setScaleX(sx);
+        pet.setScaleY(sy);
+        handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 200);
+        if (rnd.nextInt(100) < 30) showBubble(Quotes.pick("bounce", rnd), 1200);
+    }
+
+    private long bounceAnimUntil = 0;
+
+    /** 特效门控：glowUntil 之前 tickFrame 不清 colorFilter（金光/暴击特效不被动画帧抹掉） */
+    private long glowUntil = 0;
+
     @Override
     public Random rnd() { return rnd; }
 
@@ -1346,6 +1370,8 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     /** 时间感知：返回 [时段名, 问候语]；凌晨/清晨/上午/中午/下午/傍晚/晚上/深夜 */
+    public static String[] timePeriodStatic() { return timePeriod(); }
+
     public static String[] timePeriod() {
         int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
                 String[] names = {"凌晨", "清晨", "上午", "中午", "下午", "傍晚", "晚上", "深夜"};
@@ -1401,115 +1427,20 @@ public class PetService extends Service implements Flyer.Host {
     public void setTabHandleVisible(boolean on) {
         DataStore.putBool("tabHandle", on);
         if (tabHandle != null) tabHandle.setVisibility(on ? View.VISIBLE : View.GONE);
-        if (!on && chatPanel != null) chatPanel.setVisibility(View.GONE);
     }
 
     /** 悬浮聊天框：挂屏幕右侧（宽 78%），顶部显示当前前台应用名 */
     private void toggleChatPanel() {
-        if (chatPanel == null) {
-            buildChatPanel();
-        }
-        if (chatPanel.getVisibility() == View.VISIBLE) {
-            chatPanel.setVisibility(View.GONE);
-            // 收起时保持不可聚焦（不挡底层操作）
-            chatLP.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
-            try { wm.updateViewLayout(chatPanel, chatLP); } catch (Exception ignored) {}
-        } else {
-            refreshChatStatus();
-            // 展开时允许输入框拿焦点弹软键盘
-            chatLP.flags = WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
-            try { wm.updateViewLayout(chatPanel, chatLP); } catch (Exception ignored) {}
-            chatPanel.setVisibility(View.VISIBLE);
-            chatIn.requestFocus();
-            refreshChatLog();
-        }
+        // 小窗 Activity：一条输入框，点外部自动关，不挡屏幕
+        Intent i = new Intent(this, ChatActivity.class);
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        i.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);   // 每次新实例，关了不留
+        startActivity(i);
     }
+    
 
-    private void buildChatPanel() {
-        chatPanel = new LinearLayout(this);
-        chatPanel.setOrientation(LinearLayout.VERTICAL);
-        chatPanel.setPadding(dp(10), dp(10), dp(10), dp(10));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#E8FFFFFF"));
-        bg.setCornerRadius(dp(16));
-        bg.setStroke(dp(2), Color.parseColor("#111111"));
-        chatPanel.setBackground(bg);
 
-        chatStatus = new TextView(this);
-        chatStatus.setTextSize(11);
-        chatStatus.setTextColor(Color.parseColor("#666666"));
-        chatStatus.setPadding(dp(4), 0, dp(4), dp(4));
-        chatPanel.addView(chatStatus);
 
-        TextView log = new TextView(this);
-        log.setTextSize(12);
-        log.setTextColor(Color.parseColor("#111111"));
-        log.setMaxLines(8);
-        chatLogView = log;
-        ScrollView sc = new ScrollView(this);
-        sc.addView(log);
-        chatPanel.addView(sc, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        chatIn = new EditText(this);
-        chatIn.setHint("跟它说点什么…");
-        chatIn.setTextSize(13);
-        chatIn.setMaxLines(1);
-        chatIn.setTextColor(Color.parseColor("#111111"));
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        row.addView(chatIn, ip);
-        TextView send = new TextView(this);
-        send.setText("发送");
-        send.setTextSize(13);
-        send.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-        send.setTextColor(Color.parseColor("#111111"));
-        send.setGravity(Gravity.CENTER);
-        send.setPadding(dp(14), dp(10), dp(14), dp(10));
-        GradientDrawable sb = new GradientDrawable();
-        sb.setColor(Color.WHITE);
-        sb.setCornerRadius(dp(10));
-        sb.setStroke(dp(2), Color.parseColor("#111111"));
-        send.setBackground(sb);
-        send.setOnClickListener(v -> {
-            String s = chatIn.getText().toString().trim();
-            if (s.isEmpty()) return;
-            chatIn.setText("");
-            userChat(s);
-            refreshChatLog();
-        });
-        row.addView(send);
-        chatPanel.addView(row);
-
-        chatLP = new WindowManager.LayoutParams(
-                (int) (screenW * 0.78f), (int) (screenH * 0.55f),
-                overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,   // 让输入框能拿焦点弹键盘
-                PixelFormat.TRANSLUCENT);
-        chatLP.gravity = Gravity.END | Gravity.CENTER_VERTICAL;
-        try { wm.addView(chatPanel, chatLP); } catch (Exception ignored) {}
-        chatPanel.setVisibility(View.GONE);
-    }
-
-    private TextView chatLogView;
-
-    private void refreshChatLog() {
-        if (chatLogView == null) return;
-        chatLogView.setText(chatLogText().isEmpty() ? "（还没聊过天）" : chatLogText());
-    }
-
-    /** 聊天框顶部状态行：时间时段 + 前台 App 名 */
-    private void refreshChatStatus() {
-        if (chatStatus == null) return;
-        String[] p = timePeriod();
-        String app = currentAppLabel();
-        String appTxt = (app == null)
-                ? "（App 感知未生效：去设置页开『App感知』并授『使用情况访问权限』）"
-                : "当前应用：" + app;
-        chatStatus.setText("🕐 " + p[0] + "　·　" + appTxt);
-    }
 
     /** 感知开关（设置页用） */
     public void setAppSense(boolean on) {
@@ -1917,7 +1848,7 @@ public class PetService extends Service implements Flyer.Host {
         instance = null;
         handler.removeCallbacksAndMessages(null);
         emo.save();
-        for (View v : new View[]{pet, bubble, tabHandle, chatPanel}) {
+        for (View v : new View[]{pet, bubble, tabHandle}) {
             if (v != null) try { wm.removeView(v); } catch (Exception ignored) {}
         }
         super.onDestroy();
