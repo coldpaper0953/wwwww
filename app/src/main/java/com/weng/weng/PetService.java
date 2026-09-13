@@ -193,7 +193,7 @@ public class PetService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        CrashGuard.install(this);
+        CrashActivity.install(this);
         sp = getSharedPreferences("weng", MODE_PRIVATE);
         instance = this;
         firstAt = sp.getLong("first", 0);
