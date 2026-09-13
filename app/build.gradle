@@ -10,13 +10,27 @@ android {
         applicationId "com.weng.weng"
         minSdk 24
         targetSdk 34
-        versionCode 3
-        versionName "1.2"
+        versionCode 4
+        versionName "1.3"
+    }
+
+    signingConfigs {
+        weng {
+            storeFile file('keystore.p12')
+            storePassword 'wengweng123'
+            keyAlias 'wengwengwu'
+            keyPassword 'wengweng123'
+            storeType 'PKCS12'
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig signingConfigs.weng
+        }
         release {
             minifyEnabled false
+            signingConfig signingConfigs.weng
         }
     }
 

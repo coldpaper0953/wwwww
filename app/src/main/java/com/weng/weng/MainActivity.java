@@ -7,20 +7,22 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 
-/** 权限入口：申请"显示在其它应用上层"权限后启动悬浮窗服务并退出自身界面 */
+/** 入口：权限齐了→启动悬浮宠物并打开 App 内设置窗口 */
 public class MainActivity extends Activity {
 
     private static final int REQ_OVERLAY = 1;
+    private boolean grantedOnEntry;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (Settings.canDrawOverlays(this)) {
-            startPet();
+        grantedOnEntry = Settings.canDrawOverlays(this);
+        if (grantedOnEntry) {
+            startPetAndOpenSettings();
         } else {
             new AlertDialog.Builder(this)
                     .setTitle("嗡嗡嗡 needs a floating window permission")
-                    .setMessage("Just like the desktop version flies over all your windows, the little mosquito needs the \"Display over other apps\" permission to fly over your phone screen.\n\nAfter clicking OK, find 嗡嗡嗡 in the list and enable the switch, then it will automatically fly back.")
+                    .setMessage("Just like the desktop version flies over all your windows, the little mosquito needs the \"Display over other apps\" permission to fly over your phone screen.\n\nAfter clicking OK, find 嗡嗡嗡 in the list and enable the switch, and it will automatically fly back and open the settings for you.")
                     .setPositiveButton("Go enable", (d, w) -> {
                         Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                 Uri.parse("package:" + getPackageName()));
@@ -37,15 +39,16 @@ public class MainActivity extends Activity {
         super.onActivityResult(req, res, data);
         if (req == REQ_OVERLAY) {
             if (Settings.canDrawOverlays(this)) {
-                startPet();
+                startPetAndOpenSettings();
             } else {
                 finish();
             }
         }
     }
 
-    private void startPet() {
+    private void startPetAndOpenSettings() {
         startService(new Intent(this, PetService.class));
-        moveTaskToBack(true);
+        startActivity(new Intent(this, SettingsActivity.class));
+        finish();
     }
 }
