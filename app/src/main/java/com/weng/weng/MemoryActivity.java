@@ -2,7 +2,7 @@ package com.weng.weng;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.app ProgressDialog;
+import android.app.ProgressDialog;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
