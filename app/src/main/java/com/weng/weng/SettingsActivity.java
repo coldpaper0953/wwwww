@@ -247,8 +247,7 @@ public class SettingsActivity extends Activity {
         LinearLayout prankCard = card();
         LinearLayout pRow = new LinearLayout(this);
         pRow.setOrientation(LinearLayout.HORIZONTAL);
-        prankCount = input("蚊子数量(1-10)");
-        prankCount.setText(String.valueOf(com.weng.weng.DataStore.getInt("prankCount", 6)));
+        prankCount = apiInput("蚊子数量(1-10)", String.valueOf(com.weng.weng.DataStore.getInt("prankCount", 6)));
         LinearLayout.LayoutParams pcp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         pRow.addView(prankCount, pcp);
         pRow.addView(gapW(6));
