@@ -34,7 +34,7 @@ public class CrashActivity extends Activity {
         setContentView(sc);
     }
 
-    public static void install(final Activity app) {
+    public static void install(final android.content.Context app) {
         final Thread.UncaughtExceptionHandler prev = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, throwable) -> {
             try {
