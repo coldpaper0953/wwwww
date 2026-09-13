@@ -20,6 +20,8 @@ public class SettingsActivity extends Activity {
     private TextView affLabel, verLabel, chatLog, speedLabel, dndBtn, affVal, workBtn;
     private EditText input;
     private ScrollView scroller;
+    private android.app.AlertDialog pickDlg;
+    private EditText apiBaseField, apiKeyField, apiModelField;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -183,27 +185,28 @@ public class SettingsActivity extends Activity {
         // ============ API 卡片 ============
         root.addView(cardLabel("🔌 AI 接口（可换服务商）"));
         LinearLayout apiCard = card();
-        final EditText apiBase = apiInput("接口地址：填 https://api.xxx.com/v1 即可（v2/v3/本地http端口均可，自动补全）",
+        apiBaseField = apiInput("接口地址：填 https://api.xxx.com/v1 即可（v2/v3/本地http端口均可，自动补全）",
                 PetService.instance != null ? PetService.instance.apiBase : "");
-        apiCard.addView(apiBase);
+        apiCard.addView(apiBaseField);
         apiCard.addView(gap(6));
-        final EditText apiKey = apiInput("API Key", mask(PetService.instance != null ? PetService.instance.apiKey : ""));
-        apiCard.addView(apiKey);
+        // Key 留空＝沿用已保存的 Key；想换 Key 就填新的
+        apiKeyField = apiInput("API Key（留空＝沿用已保存的 Key）", "");
+        apiCard.addView(apiKeyField);
         apiCard.addView(gap(6));
-        final EditText apiModel = apiInput("模型名", PetService.instance != null ? PetService.instance.apiModel : "");
-        apiCard.addView(apiModel);
+        apiModelField = apiInput("模型名", PetService.instance != null ? PetService.instance.apiModel : "");
+        LinearLayout modelRow = new LinearLayout(this);
+        modelRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        modelRow.addView(apiModelField, mlp);
+        modelRow.addView(gapW(8));
+        TextView fetchBtn = button("📡 拉取");
+        fetchBtn.setOnClickListener(v -> fetchModelsDialog());
+        modelRow.addView(fetchBtn);
+        apiCard.addView(modelRow);
         apiCard.addView(gap(8));
-        TextView saveApi = button("💾 保存接口设置");
-        saveApi.setOnClickListener(v -> {
-            if (PetService.instance == null) return;
-            String k = apiKey.getText().toString().trim();
-            PetService.instance.setApi(
-                    apiBase.getText().toString().trim(),
-                    k.startsWith("sk-") || k.length() > 20 ? k : PetService.instance.apiKey,
-                    apiModel.getText().toString().trim());
-            Toast.makeText(this, "已保存，下一条消息生效", Toast.LENGTH_SHORT).show();
-        });
-        apiCard.addView(saveApi);
+        TextView saveApiBtn = button("💾 保存接口设置");
+        saveApiBtn.setOnClickListener(v -> saveApi());
+        apiCard.addView(saveApiBtn);
         root.addView(apiCard);
         root.addView(gap(10));
 
@@ -239,10 +242,96 @@ public class SettingsActivity extends Activity {
         setContentView(page);
     }
 
-    private String mask(String s) {
-        if (s == null) return "";
-        if (s.length() <= 10) return s;
-        return s.substring(0, 8) + "…" + s.substring(s.length() - 4);
+    /** 保存接口设置：Key 留空＝沿用已保存的（避免把空串/打码串写进存档） */
+    private void saveApi() {
+        if (PetService.instance == null) return;
+        String key = apiKeyField.getText().toString().trim();
+        PetService.instance.setApi(
+                apiBaseField.getText().toString().trim(),
+                key.isEmpty() ? PetService.instance.apiKey : key,
+                apiModelField.getText().toString().trim());
+        Toast.makeText(this, "已保存，下一条消息生效", Toast.LENGTH_SHORT).show();
+    }
+
+    /** 拉取模型列表：先把输入框里的地址/Key/模型落盘，再 GET /models，弹窗筛选选择 */
+    private void fetchModelsDialog() {
+        if (PetService.instance == null) return;
+        saveApi();
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setMessage("正在拉取模型列表…");
+        pd.setCancelable(false);
+        pd.show();
+        PetService.instance.fetchModels((models, error) -> {
+            pd.dismiss();
+            if (error != null || models == null || models.isEmpty()) {
+                Toast.makeText(this, "拉取失败：" + (error == null ? "列表为空" : error), Toast.LENGTH_LONG).show();
+                return;
+            }
+            pickModelDialog(models);
+        });
+    }
+
+    /** 模型选择弹窗：顶部搜索框实时筛选，点击条目回填到模型输入框 */
+    private void pickModelDialog(final java.util.List<String> models) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(10), dp(12), dp(4));
+        final EditText search = new EditText(this);
+        search.setHint("🔍 输入关键字筛选（如 glm / deepseek）");
+        search.setTextSize(13);
+        search.setMaxLines(1);
+        search.setBackground(box());
+        search.setPadding(dp(10), dp(8), dp(10), dp(8));
+        box.addView(search);
+        box.addView(gap(6));
+        final LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        ScrollView sc = new ScrollView(this);
+        sc.addView(list);
+        box.addView(sc, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, Math.min(dp(360), dp(42) * Math.min(models.size(), 10))));
+        Runnable rebuild = () -> {
+            list.removeAllViews();
+            String kw = search.getText().toString().trim().toLowerCase();
+            int shown = 0;
+            for (final String m : models) {
+                if (!kw.isEmpty() && !m.toLowerCase().contains(kw)) continue;
+                TextView t = new TextView(this);
+                t.setText(m);
+                t.setTextSize(13);
+                t.setTextColor(Color.parseColor("#111111"));
+                t.setPadding(dp(10), dp(11), dp(10), dp(11));
+                t.setBackground(box());
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+                lp.bottomMargin = dp(4);
+                t.setLayoutParams(lp);
+                t.setOnClickListener(v -> {
+                    apiModelField.setText(m);
+                    apiModelField.setSelection(m.length());
+                    Toast.makeText(this, "已选择：" + m, Toast.LENGTH_SHORT).show();
+                    if (pickDlg != null) pickDlg.dismiss();
+                });
+                list.addView(t);
+                shown++;
+            }
+            if (shown == 0) {
+                TextView none = small("#999999", Gravity.CENTER);
+                none.setText("没有匹配的模型");
+                list.addView(none);
+            }
+        };
+        rebuild.run();
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { rebuild.run(); }
+            @Override public void afterTextChanged(android.text.Editable s) {}
+        });
+        pickDlg = new AlertDialog.Builder(this)
+                .setTitle("📡 选择模型（共 " + models.size() + " 个）")
+                .setView(box)
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private EditText apiInput(String hint, String text) {

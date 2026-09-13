@@ -703,6 +703,65 @@ public class PetService extends Service {
         sp.edit().putString("apiBase", apiBase).putString("apiKey", apiKey).putString("apiModel", apiModel).apply();
     }
 
+    /** 从聊天端点推出模型列表端点：.../v1/chat/completions -> .../v1/models；根地址 -> .../models */
+    static String modelsEndpoint(String base) {
+        String u = base == null ? "" : base.trim();
+        if (u.length() == 0) return u;
+        if (u.endsWith("#")) u = u.substring(0, u.length() - 1).trim();
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        if (u.endsWith("/chat/completions")) {
+            u = u.substring(0, u.length() - "/chat/completions".length());
+            while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+            return u + "/models";
+        }
+        if (u.endsWith("/models")) return u;
+        return u + "/models";
+    }
+
+    /** 拉取服务商模型列表（GET /models，标准 OpenAI 格式 {"data":[{"id":...}]}） */
+    public void fetchModels(final ModelsCallback cb) {
+        final String url = modelsEndpoint(apiBase);
+        new Thread(() -> {
+            String err = null;
+            java.util.List<String> names = new java.util.ArrayList<String>();
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                c.setRequestMethod("GET");
+                c.setRequestProperty("Authorization", "Bearer " + apiKey);
+                c.setConnectTimeout(15000);
+                c.setReadTimeout(20000);
+                InputStream is = c.getResponseCode() < 400 ? c.getInputStream() : c.getErrorStream();
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                byte[] buf = new byte[8192];
+                int n;
+                while (is != null && (n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                if (is != null) is.close();
+                if (c.getResponseCode() != 200) {
+                    err = "HTTP " + c.getResponseCode();
+                } else {
+                    JSONObject j = new JSONObject(bos.toString("UTF-8"));
+                    org.json.JSONArray arr = j.optJSONArray("data");
+                    if (arr != null) {
+                        for (int i = 0; i < arr.length(); i++) {
+                            String id = arr.getJSONObject(i).optString("id", "");
+                            if (!id.isEmpty()) names.add(id);
+                        }
+                    }
+                    if (names.isEmpty()) err = "返回里没有模型（格式不对？）";
+                }
+            } catch (Exception e) {
+                err = e.getClass().getSimpleName() + (e.getMessage() == null ? "" : ": " + e.getMessage());
+            }
+            final java.util.List<String> fNames = names;
+            final String fErr = err;
+            handler.post(() -> cb.onResult(fNames, fErr));
+        }).start();
+    }
+
+    interface ModelsCallback {
+        void onResult(java.util.List<String> models, String error);
+    }
+
     private static final java.util.Map<String, String[]> DEFAULT_QUOTES = new java.util.HashMap<String, String[]>();
 
     private void loadQuotes() {
