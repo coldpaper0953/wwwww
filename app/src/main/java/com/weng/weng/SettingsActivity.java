@@ -117,8 +117,8 @@ public class SettingsActivity extends Activity {
         sizeSlider = new android.widget.SeekBar(this);
         sizeSlider.setMax(224);   // 32-256px
         sizeSlider.setProgress((int) (PetService.instance != null ? PetService.instance.petScale * 96 : 96) - 32);
-        LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        sizeRow.addView(sizeSlider, slp);
+        LinearLayout.LayoutParams szlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        sizeRow.addView(sizeSlider, szlp);
         sizeVal = new TextView(this);
         sizeVal.setTextSize(13);
         sizeVal.setTypeface(Typeface.DEFAULT_BOLD);

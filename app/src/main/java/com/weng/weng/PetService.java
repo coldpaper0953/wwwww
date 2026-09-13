@@ -1223,7 +1223,7 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     private String appSenseLine(String key) {
-        List<String> pool = new ArrayList<String>();
+        java.util.List<String> pool = new java.util.ArrayList<String>();
         for (String line : Quotes.get("appsense")) {
             String[] p = line.split("\\|");
             if (p.length == 2 && p[0].equals(key)) pool.add(p[1]);
@@ -1284,7 +1284,7 @@ public class PetService extends Service implements Flyer.Host {
 
     /** 首次教程：7 步气泡序列 */
     private void playTutorial() {
-        List<String> steps = Quotes.get("tutorial");
+        java.util.List<String> steps = Quotes.get("tutorial");
         for (int i = 0; i < steps.size(); i++) {
             final String t = steps.get(i);
             handler.postDelayed(() -> showBubble(t, 4200), 800L + i * 5000L);
