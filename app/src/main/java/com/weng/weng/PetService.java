@@ -1411,7 +1411,7 @@ public class PetService extends Service implements Flyer.Host {
         tabHandle.setPadding(0, dp(5), 0, dp(5));          // 上下 padding 减半 → 整体宽度窄一半
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadii(new float[]{dp(10), 0, 0, dp(10), dp(10), 0, 0, dp(10)});   // 左圆右直，贴边
+        g.setCornerRadius(dp(10));                        // 纯白胶囊，四角全圆
         tabHandle.setBackground(g);
         tabLP = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
