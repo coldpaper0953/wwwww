@@ -148,7 +148,7 @@ public class QuotesActivity extends Activity {
 
     private TextView button(String s) {
         TextView t = new TextView(this);
-        t.setText(s);
+        t.setText(Ico.s(this, s));
         t.setTextColor(Color.parseColor("#111111"));
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);

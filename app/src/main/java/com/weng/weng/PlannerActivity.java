@@ -332,7 +332,7 @@ public class PlannerActivity extends Activity {
 
     private TextView text(String s) {
         TextView t = new TextView(this);
-        t.setText(s);
+        t.setText(Ico.s(this, s));
         t.setTextSize(13);
         t.setTextColor(Color.parseColor("#111111"));
         t.setGravity(Gravity.CENTER_VERTICAL);
@@ -343,7 +343,7 @@ public class PlannerActivity extends Activity {
 
     private TextView cardLabel(String s) {
         TextView t = new TextView(this);
-        t.setText(s);
+        t.setText(Ico.s(this, s));
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextColor(Color.parseColor("#666666"));
@@ -365,7 +365,7 @@ public class PlannerActivity extends Activity {
 
     private TextView button(String s) {
         TextView t = new TextView(this);
-        t.setText(s);
+        t.setText(Ico.s(this, s));
         t.setTextColor(Color.parseColor("#111111"));
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);

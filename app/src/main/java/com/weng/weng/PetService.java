@@ -858,7 +858,7 @@ public class PetService extends Service implements Flyer.Host {
 
     public void showBubble(String text, long ms) {
         lastBubbleAt = System.currentTimeMillis();
-        bubble.setText(text);
+        bubble.setText(Ico.s(this, text));
         bubble.setVisibility(View.VISIBLE);
         bubbleLP.x = (int) Math.max(8, Math.min(px - 20, screenW - 20 - bubble.getWidth()));
         bubbleLP.y = (int) Math.max(50, py - 200);
@@ -1404,7 +1404,7 @@ public class PetService extends Service implements Flyer.Host {
     /** 屏幕右缘小拉手：点开=悬浮聊天框；聊天框可输可发，还显示当前前台 App 名 */
     private void createTabHandle() {
         tabHandle = new TextView(this);
-        tabHandle.setText("💬");
+        tabHandle.setText(Ico.s(this, "💬"));
         tabHandle.setTextSize(18);
         tabHandle.setTextColor(Color.WHITE);
         tabHandle.setGravity(Gravity.CENTER);

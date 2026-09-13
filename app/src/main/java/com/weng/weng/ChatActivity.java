@@ -34,7 +34,7 @@ public class ChatActivity extends Activity {
         status.setPadding(dp(4), 0, dp(4), dp(6));
         String[] p = PetService.timePeriodStatic();
         String app = PetService.instance != null ? PetService.instance.currentAppLabelPublic() : null;
-        status.setText("🕐 " + p[0] + (app == null ? "" : " · 当前：" + app));
+        status.setText(Ico.s(this, "🕐 " + p[0] + (app == null ? "" : " · 当前：" + app)));
         root.addView(status);
 
         // 输入 + 发送（就一行）

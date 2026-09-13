@@ -188,8 +188,8 @@ public class SettingsActivity extends Activity {
 
         // 状态卡：称号/情绪/饲养
         TextView statusLine = small("#555555", Gravity.LEFT);
-        statusLine.setText("❤️ " + com.weng.weng.DataStore.titleFor(com.weng.weng.DataStore.getAff())
-                + " · 今日好感 " + com.weng.weng.DataStore.sp().getInt("dailyAff", 0) + "/50");
+        statusLine.setText(Ico.s(this, "❤ " + com.weng.weng.DataStore.titleFor(com.weng.weng.DataStore.getAff())
+                + " · 今日好感 " + com.weng.weng.DataStore.sp().getInt("dailyAff", 0) + "/50"));
         statusLine.setPadding(dp(4), 0, 0, dp(4));
         petCard.addView(statusLine);
         TextView emoLine = small("#777777", Gravity.LEFT);
@@ -330,7 +330,9 @@ public class SettingsActivity extends Activity {
         exRow.setOrientation(LinearLayout.HORIZONTAL);
         TextView fortune = button("🔮 今日运势");
         fortune.setOnClickListener(v ->
-                Toast.makeText(this, com.weng.weng.Extras.fortune(), Toast.LENGTH_LONG).show());
+                new AlertDialog.Builder(this).setTitle(Ico.s(this, "🔮 今日运势"))
+                        .setMessage(Ico.s(this, com.weng.weng.Extras.fortune()))
+                        .setPositiveButton("关闭", null).show());
         exRow.addView(fortune);
         exRow.addView(gapW(8));
         TextView guide = button("📖 饲养指南");
@@ -433,10 +435,10 @@ public class SettingsActivity extends Activity {
         bootBtn.setOnClickListener(v -> {
             boolean on = !com.weng.weng.DataStore.getBool("bootAuto", false);
             com.weng.weng.DataStore.putBool("bootAuto", on);
-            bootBtn.setText(on ? "📲 开机自启：开" : "📲 开机自启：关");
+            bootBtn.setText(Ico.s(this, on ? "📲 开机自启：开" : "📲 开机自启：关"));
             Toast.makeText(this, on ? "已开启（重启后生效）" : "已关闭", Toast.LENGTH_SHORT).show();
         });
-        if (com.weng.weng.DataStore.getBool("bootAuto", false)) bootBtn.setText("📲 开机自启：开");
+        if (com.weng.weng.DataStore.getBool("bootAuto", false)) bootBtn.setText(Ico.s(this, "📲 开机自启：开"));
         aboutRow.addView(bootBtn);
         aboutRow.addView(gapW(8));
         TextView quit = button("✖ 退出");
@@ -635,27 +637,27 @@ public class SettingsActivity extends Activity {
             affLabel.setText("宠物未运行");
             return;
         }
-        affLabel.setText("❤️ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天");
-        if (emoLine != null) emoLine.setText("🧠 " + PetService.instance.emo.describe());
-        if (feedLine != null) feedLine.setText("🩸 " + PetService.instance.feedStatusText());
-        if (prankScore != null) prankScore.setText("📊 " + PetService.instance.prankScoreText());
-        if (prankBtn != null) prankBtn.setText(PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏");
+        affLabel.setText(Ico.s(this, "❤ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天"));
+        if (emoLine != null) emoLine.setText(Ico.s(this, "🧠 " + PetService.instance.emo.describe()));
+        if (feedLine != null) feedLine.setText(Ico.s(this, "🩸 " + PetService.instance.feedStatusText()));
+        if (prankScore != null) prankScore.setText(Ico.s(this, "📊 " + PetService.instance.prankScoreText()));
+        if (prankBtn != null) prankBtn.setText(Ico.s(this, PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏"));
         // 惯性档位高亮：选中档加粗+标 ●
         int lv = PetService.instance.glideLevel();
         String[] lvNames = {"关", "轻", "中", "强"};
         for (int i = 0; i < glideBtns.length; i++) {
             if (glideBtns[i] != null)
-                glideBtns[i].setText((i == lv ? "● " : "") + lvNames[i]);
+                glideBtns[i].setText(Ico.s(this, (i == lv ? "● " : "") + lvNames[i]));
         }
-        if (tabBtn != null) tabBtn.setText(com.weng.weng.DataStore.getBool("tabHandle", true) ? "💬 屏幕拉手：开" : "💬 屏幕拉手：关");
+        if (tabBtn != null) tabBtn.setText(Ico.s(this, com.weng.weng.DataStore.getBool("tabHandle", true) ? "💬 屏幕拉手：开" : "💬 屏幕拉手：关"));
         if (senseBtn != null) {
             boolean on = com.weng.weng.DataStore.getBool("appSense", true);
             String cur = PetService.instance.currentAppLabelPublic();
-            senseBtn.setText(on ? ("👁 App感知：开" + (cur == null ? "（未授权）" : "（当前:" + cur + "）")) : "👁 App感知：关");
+            senseBtn.setText(Ico.s(this, on ? ("👁 App感知：开" + (cur == null ? "（未授权）" : "（当前:" + cur + "）")) : "👁 App感知：关"));
         }
         verLabel.setText("v" + PetService.instance.curVersion() + (PetService.instance.dnd ? "（勿扰中）" : "") + (PetService.instance.workMode ? "（工作中）" : ""));
-        dndBtn.setText(PetService.instance.dnd ? "🌙 勿扰中" : "🌙 勿扰");
-        workBtn.setText(PetService.instance.workMode ? "📚 工作中" : "📚 工作");
+        dndBtn.setText(Ico.s(this, PetService.instance.dnd ? "🌙 勿扰中" : "🌙 勿扰"));
+        workBtn.setText(Ico.s(this, PetService.instance.workMode ? "📚 工作中" : "📚 工作"));
         speedLabel.setText("×" + String.format(java.util.Locale.US, "%.1f", PetService.instance.getSpeedMul()));
         if (affVal != null) affVal.setText(String.valueOf(PetService.instance.affection));
     }
@@ -670,7 +672,7 @@ public class SettingsActivity extends Activity {
 
     private TextView cardLabel(String text) {
         TextView t = new TextView(this);
-        t.setText(text);
+        t.setText(Ico.s(this, text));
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextColor(Color.parseColor("#666666"));
@@ -701,7 +703,7 @@ public class SettingsActivity extends Activity {
 
     private TextView button(String text) {
         TextView t = new TextView(this);
-        t.setText(text);
+        t.setText(Ico.s(this, text));
         t.setTextColor(Color.parseColor("#111111"));
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);

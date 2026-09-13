@@ -222,7 +222,7 @@ public class PrankEngine {
             bannerLP.y = 120;
             try { h.wm().addView(banner, bannerLP); } catch (Exception ignored) { return; }
         }
-        banner.setText(text);
+        banner.setText(Ico.s(h.pet(), text));
         banner.setVisibility(View.VISIBLE);
         h.handler().postDelayed(() -> { if (banner != null) banner.setVisibility(View.GONE); }, 2500);
     }

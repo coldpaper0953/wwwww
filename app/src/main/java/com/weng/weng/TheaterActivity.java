@@ -32,7 +32,7 @@ public class TheaterActivity extends Activity {
         root.setBackground(bg);
 
         TextView title = new TextView(this);
-        title.setText("🎭 小剧场");
+        title.setText(Ico.s(this, "🎭 小剧场"));
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(Color.parseColor("#111111"));
