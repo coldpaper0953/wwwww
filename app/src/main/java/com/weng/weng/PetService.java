@@ -306,8 +306,11 @@ public class PetService extends Service implements Flyer.Host {
         return 0;
     }
 
-    /** 查询 GitHub 最新 Release；比当前新则下载 APK，完成后自动拉起安装器 */
-    public void checkUpdate() {
+    /** 查询 GitHub 最新 Release；比当前新则下载 APK，完成后自动拉起安装器。
+     *  manual=true 为用户手动触发（失败/已是最新时气泡告知），false 为启动自检（静默）。 */
+    public void checkUpdate() { checkUpdate(false); }
+
+    public void checkUpdate(final boolean manual) {
         new Thread(() -> {
             try {
                 HttpURLConnection c = (HttpURLConnection) new URL(
@@ -334,11 +337,19 @@ public class PetService extends Service implements Flyer.Host {
                         }
                     }
                 }
-                if (tag.isEmpty() || assetUrl == null) return;
-                if (verCmp(tag, curVersion()) <= 0) return;
+                if (tag.isEmpty() || assetUrl == null) {
+                    if (manual) handler.post(() -> showBubble("检查更新失败：接口返回异常（稍后再试）", 4000));
+                    return;
+                }
+                if (verCmp(tag, curVersion()) <= 0) {
+                    if (manual) handler.post(() -> showBubble("已是最新版本 " + curVersion() + "～", 4000));
+                    return;
+                }
                 handler.post(() -> showBubble("发现新版本 " + tag + "！正在下载…", 8000));
                 downloadAndInstall(assetUrl);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                // GitHub 在国内网络常不可直连；手动触发时告知用户而不是静默吞掉
+                if (manual) handler.post(() -> showBubble("检查更新失败：连不上 GitHub（需要能访问 github.com 的网络）", 6000));
             }
         }).start();
     }
@@ -384,7 +395,14 @@ public class PetService extends Service implements Flyer.Host {
             i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
         } catch (Exception e) {
-            showBubble("安装未启动：请在系统设置里允许本应用安装", 4000);
+            // 多为未授予"安装未知应用"权限：引导跳到本应用的安装授权设置页
+            showBubble("安装未启动，正在打开授权页——请允许本应用安装更新", 6000);
+            try {
+                startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        android.net.Uri.parse("package:" + getPackageName()))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception ignored) {
+            }
         }
     }
 

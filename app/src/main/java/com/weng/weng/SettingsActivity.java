@@ -426,7 +426,7 @@ public class SettingsActivity extends Activity {
         upd.setOnClickListener(v -> {
             if (PetService.instance != null) {
                 Toast.makeText(this, "检查更新中…", Toast.LENGTH_SHORT).show();
-                PetService.instance.checkUpdate();
+                PetService.instance.checkUpdate(true);
             }
         });
         aboutRow.addView(upd);
