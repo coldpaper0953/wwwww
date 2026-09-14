@@ -124,6 +124,15 @@ public class Ico {
         MAP.put("📊", "ic_chartbar");
         MAP.put("🕊", "ic_bird");
         MAP.put("🕊️", "ic_bird");
+        MAP.put("⏰", "ic_clockoutline");
+        MAP.put("⏰️", "ic_clockoutline");
+        MAP.put("▶", "ic_play");
+        MAP.put("▶️", "ic_play");
+        MAP.put("⏸", "ic_pause");
+        MAP.put("⏸️", "ic_pause");
+        MAP.put("⏹", "ic_stop");
+        MAP.put("⏹️", "ic_stop");
+        MAP.put("✓", "ic_checkbold");
     }
 
     /** emoji 串（按长度降序拼正则，防部分匹配） */
