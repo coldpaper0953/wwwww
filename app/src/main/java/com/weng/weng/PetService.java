@@ -1793,6 +1793,17 @@ public class PetService extends Service implements Flyer.Host {
         return s.contains(THINK_OPEN) || s.contains(THINK_CLOSE);
     }
 
+    /** 是否含 CJK 汉字（思维链多为英文；记忆条目约定为中文格式） */
+    public static boolean hasCJK(String s) {
+        if (s == null) return false;
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            if (cp >= 0x4E00 && cp <= 0x9FFF) return true;
+            i += Character.charCount(cp);
+        }
+        return false;
+    }
+
     private static final java.util.regex.Pattern THINK_PAIR =
             java.util.regex.Pattern.compile(THINK_OPEN + ".*?" + THINK_CLOSE, java.util.regex.Pattern.DOTALL);
 
@@ -1879,7 +1890,7 @@ public class PetService extends Service implements Flyer.Host {
                 Memory.append(situation, fReply);
                 if (Memory.shouldDigest()) {
                     Memory.digest(PetService.this, (ok, d, e) -> {
-                        if (ok) showBubble("🧠 记忆整理完毕（" + Memory.keep() + " 条长期记忆入库）", 4000);
+                        if (ok) handler.post(() -> showBubble("🧠 记忆整理完毕（" + Memory.keep() + " 条长期记忆入库）", 4000));
                     });
                 }
             }

@@ -77,13 +77,13 @@ public class Memory {
     /** 整理结果落库（替换长期记忆，清空原始记忆） */
     public static synchronized void applyDigest(String digestText) {
         List<String> longs = new ArrayList<String>();
-        // 整理结果按行拆成条目
+        // 整理结果按行拆成条目；无汉字（英文推理行）或背诵提示词的行不入库
         for (String s : digestText.split("\n")) {
             String t = s.trim();
             if (t.isEmpty()) continue;
             // 去常见编号前缀
             t = t.replaceFirst("^\\d+[\\.、)]\\s*", "").replaceFirst("^[-•*]\\s*", "");
-            if (t.length() > 2) longs.add(t);
+            if (t.length() > 2 && PetService.hasCJK(t) && !PetService.containsLeakMarker(t)) longs.add(t);
         }
         while (longs.size() > keep()) longs.remove(0);
         org.json.JSONArray a = new org.json.JSONArray();
@@ -115,15 +115,18 @@ public class Memory {
         DataStore.sp().edit().putString("userPersona", s == null ? "" : s.trim()).apply();
     }
 
-    /** 清洗历史存档里已入库的思维链脏数据（含提示词标记/标签的条目），启动时静默执行 */
+    /** 清洗历史存档里已入库的思维链脏数据（含提示词标记/标签/无汉字的条目），启动时静默执行 */
     public static synchronized void purgeDirty() {
         try {
             List<JSONObject> r = raw();
             boolean rawChanged = false;
             for (int i = r.size() - 1; i >= 0; i--) {
                 JSONObject o = r.get(i);
-                if (PetService.containsLeakMarker(o.optString("reply", ""))
-                        || PetService.containsLeakMarker(o.optString("ev", ""))) {
+                String reply = o.optString("reply", "");
+                String ev = o.optString("ev", "");
+                // 泄漏标记，或 60 字以上仍无汉字（英文推理长文）→ 脏
+                if (PetService.containsLeakMarker(reply) || PetService.containsLeakMarker(ev)
+                        || (reply.length() > 60 && !PetService.hasCJK(reply))) {
                     r.remove(i);
                     rawChanged = true;
                 }
@@ -133,7 +136,8 @@ public class Memory {
             boolean longChanged = false;
             List<String> keepList = new ArrayList<String>();
             for (String s : l) {
-                if (PetService.containsLeakMarker(s)) longChanged = true;
+                // 记忆条目约定为中文格式，无汉字即脏
+                if (PetService.containsLeakMarker(s) || !PetService.hasCJK(s)) longChanged = true;
                 else keepList.add(s);
             }
             if (longChanged) {
