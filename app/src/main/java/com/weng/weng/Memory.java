@@ -115,6 +115,36 @@ public class Memory {
         DataStore.sp().edit().putString("userPersona", s == null ? "" : s.trim()).apply();
     }
 
+    /** 清洗历史存档里已入库的思维链脏数据（含提示词标记/标签的条目），启动时静默执行 */
+    public static synchronized void purgeDirty() {
+        try {
+            List<JSONObject> r = raw();
+            boolean rawChanged = false;
+            for (int i = r.size() - 1; i >= 0; i--) {
+                JSONObject o = r.get(i);
+                if (PetService.containsLeakMarker(o.optString("reply", ""))
+                        || PetService.containsLeakMarker(o.optString("ev", ""))) {
+                    r.remove(i);
+                    rawChanged = true;
+                }
+            }
+            if (rawChanged) DataStore.saveArr("memRaw", r);
+            List<String> l = longTerm();
+            boolean longChanged = false;
+            List<String> keepList = new ArrayList<String>();
+            for (String s : l) {
+                if (PetService.containsLeakMarker(s)) longChanged = true;
+                else keepList.add(s);
+            }
+            if (longChanged) {
+                org.json.JSONArray a = new org.json.JSONArray();
+                for (String s : keepList) a.put(s);
+                DataStore.sp().edit().putString("memLong", a.toString()).apply();
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     // ================= 副 API（整理专用；未配置则用主 API） =================
 
     public static String subBase() { return DataStore.sp().getString("subBase", ""); }
@@ -185,9 +215,12 @@ public class Memory {
                 if (is != null) is.close();
                 if (c.getResponseCode() == 200) {
                     JSONObject j = new JSONObject(bos.toString("UTF-8"));
-                    digest = j.getJSONArray("choices").getJSONObject(0)
+                    String rawDigest = j.getJSONArray("choices").getJSONObject(0)
                             .getJSONObject("message").getString("content").trim();
-                    if (digest.isEmpty()) err = "整理结果为空";
+                    // 免费网关可能把思维链内联进 content（复述提示词），脏结果不入长期记忆库
+                    rawDigest = PetService.cleanAIreply(rawDigest, 4000);
+                    digest = rawDigest;
+                    if (digest == null) err = "整理结果为空或包含思维链，已丢弃";
                 } else {
                     err = "HTTP " + c.getResponseCode();
                 }

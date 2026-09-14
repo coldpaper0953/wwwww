@@ -243,6 +243,7 @@ public class PetService extends Service implements Flyer.Host {
         affection = sp.getInt("aff", 0);
         speedMul = sp.getFloat("speedMul", 1f);
         initApi();
+        Memory.purgeDirty(); // 清洗历史存档里已入库的思维链脏数据
         loadQuotes();
         DataStore.init(this);
         emo.load();
@@ -1741,6 +1742,60 @@ public class PetService extends Service implements Flyer.Host {
     private static final String[] FALLBACK = {
             "嗡～信号不太好，等会儿再聊", "（信号弱）先自己玩会儿…", "嗡嗡…听不清，再说一遍？"};
 
+    // ---------------- AI 回复清洗（防思维链/提示词泄漏） ----------------
+
+    /** 注入提示词里的字段标记；回复含任一即说明模型在背诵提示词（思维链泄漏） */
+    private static final String[] LEAK_MARKERS = {
+            "【长期记忆】", "【当前情景】", "【当前设备】", "【好感度】", "【情绪】",
+            "【饲养】", "【饲养天数】", "【当前时间】", "【今日天气】", "【前台应用】", "【用户身份】",
+            "两句话以内", "口吻回应", "记忆整理器", "长期记忆条目"};
+    private static final String THINK_OPEN = "<think>";
+    private static final String THINK_CLOSE = "</think>";
+
+
+    /**
+     * 清洗 AI 原始回复：免费网关部分路由不拆分思维链，把推理整段内联进 content
+     * （且推理会逐字复述注入字段如【长期记忆】）。本方法剥 <think> 块、
+     * 截取末尾 After 之后正文，不可用（泄漏/空/超长/全英文）返回 null。
+     */
+    public static String cleanAIreply(String s) {
+        return cleanAIreply(s, 300);
+    }
+
+    /** @param maxLen 不同场景的长度上限（聊天台词 300，记忆整理 4000） */
+    public static String cleanAIreply(String s, int maxLen) {
+        if (s == null) return null;
+        String t = s.trim();
+        if (t.isEmpty()) return null;
+        // 成对 think 块整块剥掉；未闭合 think 之后全是推理，一并丢弃
+        t = THINK_PAIR.matcher(t).replaceAll("");
+        int a = t.indexOf(THINK_OPEN);
+        if (a >= 0) t = t.substring(0, a);
+        t = t.replace(THINK_CLOSE, "");
+        // 推理结尾常见 After …… 之后再出正文的形态，取最后一次出现之后
+        int b = t.lastIndexOf("After");
+        if (b >= 0) t = t.substring(b + 5);
+        t = t.trim();
+        if (t.isEmpty() || t.length() > maxLen) return null;
+        if (containsLeakMarker(t)) return null;
+        for (int i2 = 0; i2 < t.length(); ) {
+            int cp = t.codePointAt(i2);
+            if (cp >= 0x4E00 && cp <= 0x9FFF) return t; // CJK 统一表意文字
+            i2 += Character.charCount(cp);
+        }
+        return null; // 全篇无汉字 = 大概率英文思维链
+    }
+
+    /** 回复是否在背诵注入提示词的字段（思维链泄漏特征） */
+    public static boolean containsLeakMarker(String s) {
+        if (s == null) return false;
+        for (String m : LEAK_MARKERS) if (s.contains(m)) return true;
+        return s.contains(THINK_OPEN) || s.contains(THINK_CLOSE);
+    }
+
+    private static final java.util.regex.Pattern THINK_PAIR =
+            java.util.regex.Pattern.compile(THINK_OPEN + ".*?" + THINK_CLOSE, java.util.regex.Pattern.DOTALL);
+
     // ---------------- AI 对话（原生转发，无 CORS 问题） ----------------
 
     public void aiChat(String situation) {
@@ -1787,33 +1842,37 @@ public class PetService extends Service implements Flyer.Host {
         }
         new Thread(() -> {
             String reply = null;
-            try {
-                HttpURLConnection c = (HttpURLConnection) new URL(normalizeEndpoint(apiBase)).openConnection();
-                c.setRequestMethod("POST");
-                c.setRequestProperty("Content-Type", "application/json");
-                c.setRequestProperty("Authorization", "Bearer " + apiKey);
-                c.setDoOutput(true);
-                c.setConnectTimeout(20000);
-                c.setReadTimeout(90000);
-                c.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
-                InputStream is = c.getResponseCode() < 400 ? c.getInputStream() : c.getErrorStream();
-                ByteArrayOutputStream bos = new ByteArrayOutputStream();
-                byte[] buf = new byte[65536];
-                int n;
-                while (is != null && (n = is.read(buf)) > 0) bos.write(buf, 0, n);
-                if (is != null) is.close();
-                String raw = bos.toString("UTF-8");
-                if (c.getResponseCode() == 200) {
-                    JSONObject j = new JSONObject(raw);
-                    String content = j.getJSONArray("choices").getJSONObject(0)
-                            .getJSONObject("message").getString("content");
-                    content = content.replace("```json", "").replace("```", "").trim();
-                    try {
-                        content = new JSONObject(content).optString("message", content);
-                    } catch (Exception ignored) {}
-                    reply = content.isEmpty() ? null : content;
-                }
-            } catch (Exception ignored) {}
+            // 最多 2 次：免费网关约半数请求返回 200 但 content 为空，脏思维链回复也会被清洗置空，均重试一次
+            for (int attempt = 0; attempt < 2 && reply == null; attempt++) {
+                if (attempt > 0) try { Thread.sleep(3000); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); }
+                try {
+                    HttpURLConnection c = (HttpURLConnection) new URL(normalizeEndpoint(apiBase)).openConnection();
+                    c.setRequestMethod("POST");
+                    c.setRequestProperty("Content-Type", "application/json");
+                    c.setRequestProperty("Authorization", "Bearer " + apiKey);
+                    c.setDoOutput(true);
+                    c.setConnectTimeout(20000);
+                    c.setReadTimeout(90000);
+                    c.getOutputStream().write(body.getBytes(StandardCharsets.UTF_8));
+                    InputStream is = c.getResponseCode() < 400 ? c.getInputStream() : c.getErrorStream();
+                    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                    byte[] buf = new byte[65536];
+                    int n;
+                    while (is != null && (n = is.read(buf)) > 0) bos.write(buf, 0, n);
+                    if (is != null) is.close();
+                    String raw = bos.toString("UTF-8");
+                    if (c.getResponseCode() == 200) {
+                        JSONObject j = new JSONObject(raw);
+                        String content = j.getJSONArray("choices").getJSONObject(0)
+                                .getJSONObject("message").getString("content");
+                        content = content.replace("```json", "").replace("```", "").trim();
+                        try {
+                            content = new JSONObject(content).optString("message", content);
+                        } catch (Exception ignored) {}
+                        reply = cleanAIreply(content);
+                    }
+                } catch (Exception ignored) {}
+            }
             final String fReply = reply;
             if (fReply != null) {
                 // 记忆本：原始记忆追加（情景+回复），攒到阈值由副 API 自动整理
