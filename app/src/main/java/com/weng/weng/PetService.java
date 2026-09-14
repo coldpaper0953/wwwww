@@ -1778,12 +1778,38 @@ public class PetService extends Service implements Flyer.Host {
         t = t.trim();
         if (t.isEmpty() || t.length() > maxLen) return null;
         if (containsLeakMarker(t)) return null;
-        for (int i2 = 0; i2 < t.length(); ) {
-            int cp = t.codePointAt(i2);
-            if (cp >= 0x4E00 && cp <= 0x9FFF) return t; // CJK 统一表意文字
-            i2 += Character.charCount(cp);
+        // 统计汉字/英文字母：推理文本常为英文夹少量中文注释（如 "tsundere (傲娇)"），
+        // 正常台词以中文为主。全英文或英文占比碾压汉字 → 疑似思维链：
+        // 尝试取最后一个"以汉字开头"的行（推理是英文、回复是中文的常见结构），
+        // 取不到或仍不干净则整条拒收。
+        String cand = t;
+        if (looksLikeReasoning(t)) {
+            String tail = null;
+            String[] lines = t.split("\n");
+            for (int k = lines.length - 1; k >= 0; k--) {
+                String ln = lines[k].trim();
+                if (!ln.isEmpty()) {
+                    int cp0 = ln.codePointAt(0);
+                    if (cp0 >= 0x4E00 && cp0 <= 0x9FFF) { tail = ln; break; }
+                }
+            }
+            if (tail == null || tail.length() > maxLen || containsLeakMarker(tail)
+                    || looksLikeReasoning(tail)) return null;
+            cand = tail;
         }
-        return null; // 全篇无汉字 = 大概率英文思维链
+        return cand;
+    }
+
+    /** 英文占比碾压汉字（或全英文）→ 大概率思维链 */
+    private static boolean looksLikeReasoning(String t) {
+        int han = 0, ascii = 0;
+        for (int i = 0; i < t.length(); ) {
+            int cp = t.codePointAt(i);
+            if (cp >= 0x4E00 && cp <= 0x9FFF) han++;
+            else if ((cp >= 'a' && cp <= 'z') || (cp >= 'A' && cp <= 'Z')) ascii++;
+            i += Character.charCount(cp);
+        }
+        return han == 0 || (ascii > 20 && ascii > han * 2);
     }
 
     /** 回复是否在背诵注入提示词的字段（思维链泄漏特征） */
