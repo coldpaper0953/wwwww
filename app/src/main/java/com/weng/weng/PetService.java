@@ -171,7 +171,16 @@ public class PetService extends Service implements Flyer.Host {
     private WindowManager.LayoutParams bubbleLP;
 
     private int[] cruiseF = new int[5], happyF = new int[5], sadF = new int[5], workF = new int[5];
+    private int[] jumpF = new int[5];              // 底部跳跃（来自 assets/jump.gif）
     private int frameIdx = 0, emoIdx = 0, emoLoops = 0;
+
+    // ---- 底部跳跃：贴近屏幕下方时有机会蹦一下 ----
+    private long jumpUntil = 0, nextJumpAt = 0;
+    private float jumpBaseY = 0;
+    private int jumpIdx = -1;
+    private static final long JUMP_MS = 900L;
+    /** 离底部多远算"靠近"（占屏高比例） */
+    private static final float JUMP_BAND = 0.18f;
     private boolean playingEmo, dead;
     private String state = "cruise";
     private float px, py, vx = 2f, vy = 1.5f;
@@ -428,7 +437,7 @@ public class PetService extends Service implements Flyer.Host {
                 new Intent(this, SettingsActivity.class), android.app.PendingIntent.FLAG_IMMUTABLE);
         return b.setContentTitle("嗡嗡嗡在飞").setContentText("点这里打开设置")
                 .setContentIntent(pi)
-                .setSmallIcon(android.R.drawable.sym_def_app_icon).build();
+                .setSmallIcon(R.drawable.ic_bee).build();
     }
 
 
@@ -472,6 +481,7 @@ public class PetService extends Service implements Flyer.Host {
             happyF[i - 1] = getResources().getIdentifier("happy_" + i, "drawable", getPackageName());
             sadF[i - 1] = getResources().getIdentifier("sad_" + i, "drawable", getPackageName());
             workF[i - 1] = getResources().getIdentifier("work_" + i, "drawable", getPackageName());
+            jumpF[i - 1] = getResources().getIdentifier("jump_" + i, "drawable", getPackageName());
         }
         deadRes = getResources().getIdentifier("dead", "drawable", getPackageName());
     }
@@ -768,6 +778,39 @@ public class PetService extends Service implements Flyer.Host {
         state = "falling";
     }
 
+    // ---------------- 底部跳跃（assets/jump.gif 的 5 帧）----------------
+
+    /** 起跳：记下基准高度，之后按正弦弧线上下弹 */
+    private void startJump() {
+        jumpUntil = System.currentTimeMillis() + JUMP_MS;
+        jumpBaseY = Math.min(py, screenH - curSize() - 60);
+        jumpIdx = -1;
+        state = "jumping";
+    }
+
+    /** 跳跃进行中：t 从 0 走到 1，位置走一个正弦抛物线，同时依次播 5 帧 */
+    private void jumpTick(long now) {
+        float t = 1f - (jumpUntil - now) / (float) JUMP_MS;
+        if (t < 0f) t = 0f;
+        if (t > 1f) t = 1f;
+        py = jumpBaseY - (float) Math.sin(Math.PI * t) * (screenH * 0.14f);
+        int idx = Math.min(4, (int) (t * 5f));
+        if (idx != jumpIdx) {                   // 只在换帧时改图，省一次 setImageResource
+            jumpIdx = idx;
+            pet.setImageResource(jumpF[idx] != 0 ? jumpF[idx] : cruiseF[0]);
+        }
+        petLP.x = (int) px;
+        petLP.y = (int) py;
+        try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+        if (bubble.getVisibility() == View.VISIBLE) placeBubble();
+        if (t >= 1f) {                          // 落地，交还给巡航
+            py = jumpBaseY;
+            jumpUntil = 0;
+            state = "cruise";
+            fly.switchTo("cruise", 0);
+        }
+    }
+
     private void clampPet() {
         int sz = curSize();
         if (px < 0) { px = 0; vx = Math.abs(vx); }
@@ -841,6 +884,22 @@ public class PetService extends Service implements Flyer.Host {
                 return;
             }
             // 常规：Flyer 状态机驱动（falling 由上面处理；flyer 的 cruise 内含撞边反弹）
+            long nowT2 = System.currentTimeMillis();
+            if (nowT2 < jumpUntil) {          // 跳跃演出中：位置和帧都由 jumpTick 接管
+                jumpTick(nowT2);
+                return;
+            }
+            // 靠近屏幕底部 → 有机会蹦一下
+            if (nowT2 >= nextJumpAt && !dragged && feedPhase == 0 && fly.state.equals("cruise")) {
+                float bottomLine = screenH - curSize() - 60;
+                if (py > bottomLine - screenH * JUMP_BAND) {
+                    nextJumpAt = nowT2 + 4000L;      // 每 4 秒最多试一次
+                    if (rnd.nextInt(100) < 35) {
+                        startJump();
+                        return;
+                    }
+                }
+            }
             fly.step();
             // 状态同步（snapping 等剧情态存 state，运动态存 fly.state）
             if (!state.equals("snapping") && !state.equals("stunned")) state = fly.state;
@@ -863,6 +922,7 @@ public class PetService extends Service implements Flyer.Host {
                 pet.setImageResource(deadRes != 0 ? deadRes : cruiseF[0]);
                 return;
             }
+            if (System.currentTimeMillis() < jumpUntil) return;   // 跳跃期间由 jumpTick 管帧
             if (playingEmo) {
                 int[] set = (emoSet == SET_HAPPY) ? happyF : sadF;
                 pet.setImageResource(set[emoIdx]);
