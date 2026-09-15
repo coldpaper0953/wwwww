@@ -8,6 +8,7 @@ import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -114,6 +115,58 @@ public class DataStore {
     public static void setStuffedUntil(long until) { P.edit().putLong("stuffedUntil", until).apply(); }
 
     public static long getStuffedUntil() { return P.getLong("stuffedUntil", 0L); }
+
+    // ---- 饱食度 / 血池：按"真实流逝时长"结算 ----
+    // 饱食度：白天 12.6/小时，夜间 ×1.6（约 20/小时）
+    // 血池：  白天 7.9/小时，夜间 ×0.8（约 6.3/小时）
+    private static final float SAT_PER_SEC_DAY = 0.0035f;
+    private static final float BLOOD_PER_SEC_DAY = 0.0022f;
+    private static final float SAT_NIGHT_MUL = 1.6f;
+    private static final float BLOOD_NIGHT_MUL = 0.8f;
+    /** 单次最多结算 3 天，避免长时间没开 App 后一开机直接见底 */
+    private static final float MAX_ELAPSED_SEC = 72 * 3600f;
+
+    /**
+     * 按真实流逝的秒数结算饱食度下降与血池回复。
+     * 幂等、可随时调用：关机 / 后台挂起期间的时间一样算数（下次调用时一次性补算）。
+     */
+    public static void tickOverTime() {
+        long now = System.currentTimeMillis();
+        long last = P.getLong("satAt", 0L);
+        if (last <= 0L) {                      // 首次启用：只打时间戳，不结算
+            P.edit().putLong("satAt", now).apply();
+            return;
+        }
+        float sec = (now - last) / 1000f;
+        if (sec < 1f) return;
+        if (sec > MAX_ELAPSED_SEC) sec = MAX_ELAPSED_SEC;
+        P.edit().putLong("satAt", now).apply();   // 先落时间戳，避免重复结算
+        int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+        boolean night = h >= 22 || h < 7;
+        setSatiety(getSatiety() - sec * SAT_PER_SEC_DAY * (night ? SAT_NIGHT_MUL : 1f));
+        setBlood(getBlood() + sec * BLOOD_PER_SEC_DAY * (night ? BLOOD_NIGHT_MUL : 1f));
+    }
+
+    /** 饥饿档位（与电脑版原设计一致）：starving / hungry / normal / full */
+    public static String hungerLevel(float sat) {
+        if (sat < 15f) return "starving";
+        if (sat < 35f) return "hungry";
+        if (sat > 85f) return "full";
+        return "normal";
+    }
+
+    public static String hungerText(float sat) {
+        String l = hungerLevel(sat);
+        if (l.equals("starving")) return "饿扁了";
+        if (l.equals("hungry")) return "有点饿";
+        if (l.equals("full")) return "吃饱了";
+        return "正常";
+    }
+
+    public static boolean isHungry(float sat) {
+        String l = hungerLevel(sat);
+        return l.equals("starving") || l.equals("hungry");
+    }
 
     // ================= 通用 JSON 数组（待办/习惯/记忆/回忆录/成就...） =================
 

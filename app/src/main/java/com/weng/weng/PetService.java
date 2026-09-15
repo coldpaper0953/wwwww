@@ -206,9 +206,10 @@ public class PetService extends Service implements Flyer.Host {
     private boolean afkWarned = false;
     private String lastDominant = null;
     private float pinchStartDist = 0;
-    private int feedPhase = 0;          // 献血三段式：0无 1俯冲 2盘旋 3叮咬
+    private int feedPhase = 0;          // 献血演出：0无 1俯冲 2盘旋 3叮咬（纯装饰，不结算、不卡喂食）
     private long feedAt = 0;
     private float feedX = 0, feedY = 0;
+    private long lastFeedAt = 0;        // 上次真正吸到血的时间（用于"刚吃饱不喊饿"）
 
     // 甩动惯性：拖动速度采样
     private float dragVx = 0, dragVy = 0;
@@ -246,6 +247,7 @@ public class PetService extends Service implements Flyer.Host {
         Memory.purgeDirty(); // 清洗历史存档里已入库的思维链脏数据
         loadQuotes();
         DataStore.init(this);
+        DataStore.tickOverTime();   // 补算 App 没开着的那段时间（饱食度下降 / 血池回复）
         emo.load();
         petScale = DataStore.getFloat("petScale", 1f);
         fly = new Flyer(this);
@@ -649,77 +651,90 @@ public class PetService extends Service implements Flyer.Host {
         return r;
     }
 
-    /** 献血入口（设置页调用）：血池为 0 拒绝；三段式叮咬演出 */
+    /**
+     * 献血入口（设置页调用）。
+     * 结算即时完成，不再等演出走完 —— 无冷却、不挑食、不拒绝，用户想喂几次喂几次。
+     * 饱食度按「吃掉多少血 = 加多少饱食度」1:1 结算（暴击 ×2），所以吸完不会再立刻喊饿。
+     */
     public void startFeed() {
-        if (dead || feedPhase != 0) return;
-        if (DataStore.getBlood() <= 0.5f) {
+        if (dead) return;
+        DataStore.tickOverTime();               // 先把这段时间的自然消耗结掉，再算这一口
+        float pool = DataStore.getBlood();
+        if (pool <= 0.5f) {
             showBubble("血量还没攒够，等会儿再来～", 3000);
             return;
         }
+
+        // ---- 叮咬结算（即时）----
+        // 随机食量：这一口吃掉血池的 40%~100%，保底 12，最多不超过血池
+        float blood = pool * (0.4f + rnd.nextFloat() * 0.6f);
+        if (blood < 12f) blood = Math.min(pool, 12f);
+        if (blood > pool) blood = pool;
+        boolean crit = rnd.nextInt(100) < 18;
+
+        DataStore.setBlood(pool - blood);
+        DataStore.addBloodTotal(blood);
+        float before = DataStore.getSatiety();
+        float gain = blood * (crit ? 2f : 1f);
+        DataStore.setSatiety(before + gain);
+        lastFeedAt = System.currentTimeMillis();
+
+        // ---- 反馈 ----
+        if (crit) {
+            // 暴击金光：金色高亮持续 1.5s（glowUntil 挡住 tickFrame 清滤镜）+ 膨胀
+            glowUntil = System.currentTimeMillis() + 1500;
+            pet.setColorFilter(new android.graphics.PorterDuffColorFilter(
+                    Color.rgb(255, 200, 0), android.graphics.PorterDuff.Mode.SRC_ATOP));
+            pet.setScaleX(1.45f);
+            pet.setScaleY(1.45f);
+            handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1500);
+        } else {
+            pet.setScaleX(1.3f);
+            pet.setScaleY(1.3f);
+            handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1800);
+        }
+        String msg = "吸了 " + (int) blood + " 血，饱食度 +" + (int) gain
+                + (crit ? "（暴击！）" : "");
+        showBubble(crit ? "✨这血也太新鲜了！！" + msg : msg, 4000);
+        aiChat(crit
+                ? "用户献血给你，这次血超新鲜，你暴击吸了双倍"
+                : "用户献血给你，你吸了一口");
+
+        // 跨献血称号档
+        float total = DataStore.getBloodTotal();
+        float[] lines = {250, 600, 1500, 3000};
+        for (float l : lines) {
+            if (total >= l && total - blood < l) {
+                showBubble("🎖️ 献血称号晋升：" + DataStore.bloodTitle(), 5000);
+            }
+        }
+        // 顶到满饱食度才打个嗝（纯趣味反馈，不会拦住下一次喂食）
+        if (DataStore.getSatiety() >= 99.5f && before < 99.5f) {
+            DataStore.setStuffedUntil(System.currentTimeMillis() + 60000L);
+        }
+
+        // ---- 演出（纯装饰，可随时再点重来，不影响结算）----
         feedPhase = 1;
         feedAt = System.currentTimeMillis();
         feedX = px;
         feedY = py;
         fly.switchTo("dash", 30);
-        showBubble("来咯来咯～", 1200);
     }
 
+    /** 献血演出状态机：只负责动画，不做任何数值结算 */
     private void feedTick() {
         if (feedPhase == 0) return;
         long t = System.currentTimeMillis() - feedAt;
         if (feedPhase == 1 && t > 600) {          // 俯冲完→盘旋
             feedPhase = 2;
             feedAt = System.currentTimeMillis();
-            fly.switchTo("spiral", 270);
-        } else if (feedPhase == 2 && t > 8000) {  // 盘旋完→叮咬
+            fly.switchTo("spiral", 60);
+        } else if (feedPhase == 2 && t > 1200) {  // 盘旋完→收尾
             feedPhase = 3;
             feedAt = System.currentTimeMillis();
             fly.switchTo("dash", 12);
-        } else if (feedPhase == 3 && t > 400) {   // 叮咬结算
+        } else if (feedPhase == 3 && t > 400) {   // 演出结束
             feedPhase = 0;
-            boolean picky = rnd.nextInt(100) < 15;
-            boolean crit = rnd.nextInt(100) < 18;
-            if (picky) {
-                showBubble(pick("今天不想吸你的，想去外面觅食～", "哼，姿势不对，改天再来！"), 3500);
-                aiChat("用户要给你献血但你今天挑食不想吸");
-                return;
-            }
-            float blood = Math.min(DataStore.getBlood(), 20f);
-            DataStore.setBlood(DataStore.getBlood() - blood);
-            DataStore.addBloodTotal(blood);
-            float gain = blood * (crit ? 1.0f : 0.5f);
-            DataStore.setSatiety(Math.min(100f, DataStore.getSatiety() + gain));
-            if (crit) {
-                // 暴击金光：金色高亮持续 1.5s（glowUntil 挡住 tickFrame 清滤镜）+ 膨胀
-                glowUntil = System.currentTimeMillis() + 1500;
-                pet.setColorFilter(new android.graphics.PorterDuffColorFilter(
-                        Color.rgb(255, 200, 0), android.graphics.PorterDuff.Mode.SRC_ATOP));
-                pet.setScaleX(1.45f);
-                pet.setScaleY(1.45f);
-                showBubble("✨这血也太新鲜了！！", 4000);
-                handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1500);
-            } else {
-                pet.setScaleX(1.3f);
-                pet.setScaleY(1.3f);
-                handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1800);
-            }
-            String oldT = DataStore.bloodTitle();
-            showBubble("吸了 " + (int) blood + " 血，饱食度 +" + (int) gain + (crit ? "（暴击！）" : ""), 4000);
-            aiChat(crit
-                    ? "用户献血给你，这次血超新鲜，你暴击吸了双倍"
-                    : "用户献血给你，你吸了一口");
-            // 跨献血称号档
-            float total = DataStore.getBloodTotal();
-            float[] lines = {250, 600, 1500, 3000};
-            for (float l : lines) {
-                if (total >= l && total - blood < l) {
-                    showBubble("🎖️ 献血称号晋升：" + DataStore.bloodTitle(), 5000);
-                }
-            }
-            // 吃撑检测
-            if (DataStore.getSatiety() > 90) {
-                DataStore.setStuffedUntil(System.currentTimeMillis() + 150000L);
-            }
         }
     }
 
@@ -929,25 +944,20 @@ public class PetService extends Service implements Flyer.Host {
 
     // ---------------- 阶段1新增：周期任务 ----------------
 
-    /** 30s：饱食度下降/血池回复/吃撑结束/打嗝/饥饿催血 */
+    /** 30s：饱食度随时间下降/血池回复/吃撑结束/打嗝/饥饿催血 */
     private void metaTick() {
         handler.postDelayed(this::metaTick, 30000);
+        // 饱食度与血池按"真实流逝时长"结算（关机、后台挂起期间的时间也算）
+        DataStore.tickOverTime();
         float sat = DataStore.getSatiety();
-        float blood = DataStore.getBlood();
-        boolean night = isNight();
-        // 饱食度：夜间掉 1.6 倍
-        sat -= night ? 0.09f : 0.055f;
-        // 血池被动回复：夜间 0.8 倍
-        blood += night ? 0.05f : 0.065f;
-        DataStore.setSatiety(sat);
-        DataStore.setBlood(Math.min(100f, blood));
-        // 吃撑打嗝
+        // 吃撑打嗝（纯趣味，不影响喂食）
         if (System.currentTimeMillis() < DataStore.getStuffedUntil() && rnd.nextInt(100) < 25) {
             showBubble(Quotes.pick("stuffed", rnd), 2000);
             if (fly.state.equals("cruise")) fly.switchTo("drift", 150);
         }
-        // 饥饿催血
-        if (sat < 35 && !dnd && !dead && rnd.nextInt(100) < 40) {
+        // 饥饿催血：刚喂过 90s 内不喊饿，避免"刚吸完又喊饿"的自相矛盾
+        boolean justFed = System.currentTimeMillis() - lastFeedAt < 90000L;
+        if (sat < 35 && !justFed && !dnd && !dead && rnd.nextInt(100) < 40) {
             showBubble(Quotes.pick("hungry", rnd), 3500);
             if (fly.state.equals("cruise")) fly.switchTo("sleepy", 200);
         }
@@ -1729,8 +1739,11 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     public String feedStatusText() {
-        return "饱食度 " + (int) DataStore.getSatiety() + "/100 · 血池 " + (int) DataStore.getBlood()
-                + "/100 · 累计献血 " + (int) DataStore.getBloodTotal() + "（" + DataStore.bloodTitle() + "）";
+        DataStore.tickOverTime();
+        float sat = DataStore.getSatiety();
+        return "饱食度 " + (int) sat + "/100（" + DataStore.hungerText(sat) + "）· 血池 "
+                + (int) DataStore.getBlood() + "/100 · 累计献血 "
+                + (int) DataStore.getBloodTotal() + "（" + DataStore.bloodTitle() + "）";
     }
 
     public void logChat(String who, String text) {
