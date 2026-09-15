@@ -630,13 +630,14 @@ public class PetService extends Service implements Flyer.Host {
                         lastInteractAt = nowJ;
                         dragged = false;
                         petted = false;
-                        if (dist < 60) {                        // 轻点：向上平移「跳跃高度」再落回
+                        if (dist < 60) {                        // 轻点：向上平移「跳跃高度」再落回 + 同时触发 AI 请求
                             jumpBaseY = baseLine();
                             py = jumpBaseY;
                             jumpHopsLeft = 1;
                             beginHop(nowJ);
                             showBubble("跳！", 800);
                             awardAff(1);
+                            aiChat("用户在 jump 模式点了你一下，你原地跳了一下");
                         } else {                                // 拖动结束：贴回站立线
                             py = baseLine();
                             clampPet();
