@@ -199,8 +199,8 @@ public class PetService extends Service implements Flyer.Host {
     public boolean jumpMode = false;
     /** 下降速度（像素/帧；tick 30ms → 约 80px/秒，慢悠悠挪过去） */
     private static final float DESCEND_SPEED = 2.4f;
-    /** 单跳时长范围：0.5~2 秒 */
-    private static final float HOP_MIN_MS = 500f, HOP_MAX_MS = 2000f;
+    /** 点击跳：向上平移「跳跃高度」再落回的总时长 */
+    private static final float HOP_MS = 600f;
     /** 每帧横向漂移量（像素），约 36px/秒 */
     private static final float HOP_DRIFT_STEP = 1.1f;
     /** 离底部多远算"靠近"（占屏高比例）—— 2% 就是几乎贴着底边才开始 */
@@ -625,15 +625,12 @@ public class PetService extends Service implements Flyer.Host {
                         lastInteractAt = nowJ;
                         dragged = false;
                         petted = false;
-                        if (dist < 60) {                        // 轻点：跳两下
-                            if (nowJ >= jumpUntil || py >= jumpBaseY - 2f) {   // 没在跳，或这一跳已落地 → 立刻重跳
-                                jumpBaseY = baseLine();
-                                py = jumpBaseY;
-                                jumpHopsLeft = 2;
-                                beginHop(nowJ);
-                                awardAff(1);
-                            }
-                        } else {                                // 拖动结束：贴回底部
+                        if (dist < 60) {                        // 轻点：向上平移 n 再落回
+                            jumpBaseY = py;
+                            jumpHopsLeft = 1;
+                            beginHop(nowJ);
+                            awardAff(1);
+                        } else {                                // 拖动结束：贴回站立线
                             py = baseLine();
                             clampPet();
                             petLP.x = (int) px;
@@ -678,6 +675,9 @@ public class PetService extends Service implements Flyer.Host {
                             showMinorBubble(tapCount == 1 ? "嗯？" : "别闹…", 1800);
                             awardAff(1);
                             aiChat(tapCount == 1 ? "用户戳了你一下" : "用户又戳了你一下，这是第 " + tapCount + " 次");
+                            jumpBaseY = py;              // 点一下就向上平移一小段再落回
+                            jumpHopsLeft = 1;
+                            beginHop(now);
                         }
                     } else if (dur >= 1500) {             // 长按拥抱
                         fly.switchTo("sleepy", 300);
@@ -944,14 +944,17 @@ public class PetService extends Service implements Flyer.Host {
         pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
     }
 
-    /** 起跳：随机 0.5~2 秒的滞空时间，重新掷横向漂移方向，按设置取跳跃高度 */
-    private void beginHop(long now) {        hopMs = HOP_MIN_MS + rnd.nextFloat() * (HOP_MAX_MS - HOP_MIN_MS);
+    /** 起跳（点击/底部演出共用）：向上平移「跳跃高度」再原路落回，全程 0.6 秒 */
+    private void beginHop(long now) {
+        hopMs = HOP_MS;
         int pct = Math.max(4, Math.min(40, DataStore.getInt("jumpPct", 14)));
         hopAmp = screenH * pct / 100f;
-        if (hopAmp > jumpBaseY - 60f) hopAmp = Math.max(60f, jumpBaseY - 60f);   // 弧顶不许飞出屏幕
+        if (hopAmp > jumpBaseY - 40f) hopAmp = Math.max(40f, jumpBaseY - 40f);   // 顶点不许飞出屏幕
         if (Math.abs(hopDrift) < 0.01f) hopDrift = rnd.nextBoolean() ? HOP_DRIFT_STEP : -HOP_DRIFT_STEP;
         if (jumpMode) hopDrift = 0f;         // jump 模式原地跳，横移交给用户拖
         jumpIdx = -1;
+        pet.setScaleX(1f);
+        pet.setScaleY(1f);
         jumpUntil = (long) (now + hopMs);
         state = "hopping";
     }
@@ -961,31 +964,16 @@ public class PetService extends Service implements Flyer.Host {
      * 并用 cos 相位做落地压扁/腾空拉伸，落地后接下一跳或收尾。
      */
     private void jumpTick(long now) {
-        float t = 1f - (jumpUntil - now) / hopMs;    // 整个周期 0..1（= "每 0.5~2 秒一次"的节奏）
+        float t = 1f - (jumpUntil - now) / hopMs;    // 0..1
         if (t < 0f) t = 0f;
         if (t > 1f) t = 1f;
-        // 空中相位：只占周期前一小段（≤550ms），保证"跳"是短促有力的，剩下时间落地站姿
-        float airMs = Math.min(0.45f * hopMs, 550f);
-        float at = t * hopMs / airMs;                // 0..1，超过 1 = 已落地
-        if (at < 1f) {
-            py = jumpBaseY - (float) Math.sin(Math.PI * at) * hopAmp;
-            // 弹性缩放：落地压扁 / 腾空拉伸（连续曲线，不会一格一格跳）
-            float phase = (float) Math.cos(2 * Math.PI * at);
-            pet.setScaleX(1f + 0.10f * phase);
-            pet.setScaleY(1f - 0.14f * phase);
-            int idx = Math.min(4, (int) (at * 5f));  // 5 帧 9~18fps，不再像幻灯片
-            if (idx != jumpIdx) {
-                jumpIdx = idx;
-                pet.setImageResource(jumpF[idx] != 0 ? jumpF[idx] : cruiseF[0]);
-            }
-        } else {                                     // 已落地：站姿等下一跳
-            py = jumpBaseY;
-            pet.setScaleX(1f);
-            pet.setScaleY(1f);
-            if (jumpIdx != 0) {
-                jumpIdx = 0;
-                pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
-            }
+        // 向上平移 n 再落回：前半程匀速升，后半程匀速降（就按用户说的最简单做法）
+        float up = (t < 0.5f) ? (t / 0.5f) : (1f - t) / 0.5f;
+        py = jumpBaseY - up * hopAmp;
+        int idx = Math.min(4, (int) (t * 5f));
+        if (idx != jumpIdx) {
+            jumpIdx = idx;
+            pet.setImageResource(jumpF[idx] != 0 ? jumpF[idx] : cruiseF[0]);
         }
         // 横向漂移：像在底边"走"着弹，不再原地干蹦
         px += hopDrift;
@@ -1156,7 +1144,10 @@ public class PetService extends Service implements Flyer.Host {
                 if (bubble.getVisibility() == View.VISIBLE) placeBubble();
                 return;
             }
-            if (jumpMode) { jumpModeTick(System.currentTimeMillis()); return; }
+            // 跳跃动画永远最优先：点击触发的"升 n 落回"在打盹/勿扰/工作/jump 任何模式下都照常播
+            long nowT2 = System.currentTimeMillis();
+            if (nowT2 < jumpUntil) { jumpTick(nowT2); return; }
+            if (jumpMode) { jumpModeTick(nowT2); return; }
             if (napping) return;
             if (workMode) return;   // 工作模式悬停不动
             if (dnd) {              // 勿扰：慢慢沉到屏幕底部，然后站着不动
@@ -1180,8 +1171,6 @@ public class PetService extends Service implements Flyer.Host {
                 return;
             }
             // 常规：Flyer 状态机驱动（falling 由上面处理；flyer 的 cruise 内含撞边反弹）
-            long nowT2 = System.currentTimeMillis();
-
             // ① 正在慢慢靠近底部：一点点往下挪，到站后转为站立（不瞬移）
             if (approaching) {
                 if (descendToBottom(nowT2)) {
@@ -1215,12 +1204,7 @@ public class PetService extends Service implements Flyer.Host {
                 return;
             }
 
-            // ③ 跳跃演出中：位置和帧都由 jumpTick 接管
-            if (nowT2 < jumpUntil) {
-                jumpTick(nowT2);
-                return;
-            }
-
+            // ③（跳跃演出已提前到 tickMove 最前面处理）
             // ④ 贴到底边（离底 2% 以内）→ 开始慢慢往底部挪，到站后走站立→连跳→飞走
             if (nowT2 >= nextJumpAt && !dragged && feedPhase == 0 && fly.state.equals("cruise")) {
                 float bottomLine = baseLine();
@@ -1289,6 +1273,9 @@ public class PetService extends Service implements Flyer.Host {
 
     private void smackDead() {
         dead = true;
+        jumpUntil = 0;
+        standing = false;
+        approaching = false;
         emo.add("生气", 15);
         Emotion.record(emo.dominant());
         hideBubble();
