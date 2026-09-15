@@ -426,9 +426,9 @@ public class SettingsActivity extends Activity {
 
         // ============ 主动搭话节奏卡片 ============
         root.addView(cardLabel("⏰ 主动搭话节奏"));
-        LinearLayout chatCard = card();
+        LinearLayout chatRhythmCard = card();
 
-        chatCard.addView(rowLabel("基准间隔（每隔 n 分钟主动来搭理你一次）"));
+        chatRhythmCard.addView(rowLabel("基准间隔（每隔 n 分钟主动来搭理你一次）"));
         LinearLayout gapRow = new LinearLayout(this);
         gapRow.setOrientation(LinearLayout.HORIZONTAL);
         chatGapSlider = new android.widget.SeekBar(this);
@@ -442,9 +442,9 @@ public class SettingsActivity extends Activity {
             DataStore.putFloat("chatGapMin", chatGapSlider.getProgress() + 5f);
             chatGapVal.setText((chatGapSlider.getProgress() + 5) + " 分");
         }));
-        chatCard.addView(gapRow);
+        chatRhythmCard.addView(gapRow);
 
-        chatCard.addView(rowLabel("动态抖动（在这个间隔上下浮动，避免每次都一样准点）"));
+        chatRhythmCard.addView(rowLabel("动态抖动（在这个间隔上下浮动，避免每次都一样准点）"));
         LinearLayout jitRow = new LinearLayout(this);
         jitRow.setOrientation(LinearLayout.HORIZONTAL);
         chatJitSlider = new android.widget.SeekBar(this);
@@ -458,9 +458,9 @@ public class SettingsActivity extends Activity {
             DataStore.putInt("chatJitter", chatJitSlider.getProgress());
             chatJitVal.setText("±" + chatJitSlider.getProgress() + "%");
         }));
-        chatCard.addView(jitRow);
+        chatRhythmCard.addView(jitRow);
 
-        chatCard.addView(rowLabel("每天最多主动说几条（0 ＝ 不限）"));
+        chatRhythmCard.addView(rowLabel("每天最多主动说几条（0 ＝ 不限）"));
         LinearLayout capRow = new LinearLayout(this);
         capRow.setOrientation(LinearLayout.HORIZONTAL);
         chatCapSlider = new android.widget.SeekBar(this);
@@ -474,12 +474,12 @@ public class SettingsActivity extends Activity {
             DataStore.putInt("chatDailyCap", chatCapSlider.getProgress());
             chatCapVal.setText(chatCapSlider.getProgress() == 0 ? "不限" : chatCapSlider.getProgress() + " 条");
         }));
-        chatCard.addView(capRow);
+        chatRhythmCard.addView(capRow);
 
         chatCountVal = small("#777777", Gravity.LEFT);
         chatCountVal.setPadding(dp(4), dp(2), 0, dp(2));
-        chatCard.addView(chatCountVal);
-        root.addView(chatCard);
+        chatRhythmCard.addView(chatCountVal);
+        root.addView(chatRhythmCard);
         root.addView(gap(10));
 
         // ============ 更新与关于卡片 ============
