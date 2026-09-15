@@ -544,6 +544,10 @@ public class PetService extends Service implements Flyer.Host {
                     float mx = ev.getRawX(), my = ev.getRawY();
                     if (Math.hypot(mx - downX, my - downY) > 18) {
                         dragged = true;
+                        if (jumpUntil != 0) {        // 用户手动拖了，立刻收掉跳跃，别把宠物拽回原地
+                            jumpUntil = 0;
+                            state = "cruise";
+                        }
                         // 速度采样（松手惯性用）：记最近一次 MOVE 的位移/时间
                         long nowT = System.currentTimeMillis();
                         if (nowT > lastMoveAt) {
@@ -775,6 +779,7 @@ public class PetService extends Service implements Flyer.Host {
         fallVy = vy0;
         if (Math.abs(fallVx) < 1f && fallVy > -3f) fallVy = -5f;
         fallBounces = 0;
+        jumpUntil = 0;          // 被甩出去就打断跳跃，免得落地后又接着跳
         state = "falling";
     }
 

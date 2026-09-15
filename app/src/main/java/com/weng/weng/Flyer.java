@@ -141,8 +141,12 @@ public class Flyer {
                 clampPos();
                 return true;
             case "hover_jitter":
-                if (!perched) { ax = x; ay = y; perched = true; }
-                h.setPos(ax + (r.nextInt(25) - 12), ay + (r.nextInt(25) - 12));
+                // 悬停微颤：几个不同周期的正弦叠加成平滑轨迹。
+                // 注意别写成"每 tick 重新随机一个偏移"——tick 是 30ms，那就是 33Hz 的随机跳变，看起来是在抽搐。
+                if (!perched) { ax = x; ay = y; perched = true; ang = 0; }
+                ang += 0.22f;
+                h.setPos(ax + (float) (Math.sin(ang) * 5 + Math.sin(ang * 2.7) * 2.5),
+                        ay + (float) (Math.cos(ang * 1.4) * 4 + Math.sin(ang * 3.1) * 2));
                 if (System.currentTimeMillis() - lastSwitchAt > 2200) switchTo("cruise", 0);
                 return true;
             case "edge_walk": {
@@ -205,8 +209,11 @@ public class Flyer {
                     perchX = W / 2 - h.size() / 2;
                     perchY = 90;
                     perched = true;
+                    ang = 0;
                 }
-                h.setPos(perchX + (r.nextInt(7) - 3), perchY + (r.nextInt(5) - 2));
+                ang += 0.18f;
+                h.setPos(perchX + (float) Math.sin(ang) * 2f,
+                        perchY + (float) Math.sin(ang * 1.6f) * 1.5f);
                 stateTimer--;
                 if (stateTimer <= 0) switchTo("cruise", 0);
                 return stateTimer % 2 == 0;
@@ -226,8 +233,11 @@ public class Flyer {
                 return true;
             }
             case "idle_fidget": {
-                if (!perched) { ax = x; ay = y; perched = true; }
-                h.setPos(ax + (r.nextInt(31) - 15), ay + (r.nextInt(31) - 15));
+                // 小动作：平滑地晃一晃（同样是正弦，不要每 tick 随机）
+                if (!perched) { ax = x; ay = y; perched = true; ang = 0; }
+                ang += 0.12f;
+                h.setPos(ax + (float) Math.sin(ang) * 9,
+                        ay + (float) Math.sin(ang * 2f) * 4);
                 stateTimer--;
                 if (stateTimer <= 0) switchTo("cruise", 0);
                 return true;

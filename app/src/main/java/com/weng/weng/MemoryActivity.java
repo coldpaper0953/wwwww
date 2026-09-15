@@ -23,6 +23,11 @@ import java.util.List;
 public class MemoryActivity extends Activity {
 
     private TextView statLine, rawBox, longBox, subLine;
+    private TextView digestLine;
+    private TextView digestBtn;
+    private ProgressDialog digestPd;
+    private boolean digesting = false;
+    private boolean destroyed = false;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -53,14 +58,19 @@ public class MemoryActivity extends Activity {
         longBox = small("#111111");
         c1.addView(longBox);
         LinearLayout lRow = row();
-        TextView digestNow = button("🌀 立即整理");
-        digestNow.setOnClickListener(v -> doDigest());
-        lRow.addView(digestNow);
+        digestBtn = button("🌀 立即整理");
+        digestBtn.setOnClickListener(v -> doDigest());
+        lRow.addView(digestBtn);
         lRow.addView(gapW(6));
         TextView setTh = button("⚙ 阈值/保留数");
         setTh.setOnClickListener(v -> thresholdDialog());
         lRow.addView(setTh);
         c1.addView(lRow);
+        // 整理状态行：弹窗被系统干掉时也能看到结果（不再只靠 Toast）
+        digestLine = small("#777777");
+        digestLine.setPadding(0, dp(6), 0, 0);
+        digestLine.setText("空闲中");
+        c1.addView(digestLine);
         root.addView(c1);
         root.addView(gap(10));
 
@@ -159,25 +169,56 @@ public class MemoryActivity extends Activity {
     }
 
     private void doDigest() {
+        if (digesting) {
+            Toast.makeText(this, "正在整理中，稍等一下…", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (PetService.instance == null) {
             Toast.makeText(this, "宠物未运行", Toast.LENGTH_SHORT).show();
             return;
         }
-        final ProgressDialog pd = new ProgressDialog(this);
-        pd.setMessage("正在用副 API 整理记忆…");
-        pd.setCancelable(false);
-        pd.show();
+        digesting = true;
+        if (digestBtn != null) digestBtn.setText(Ico.s(this, "🌀 整理中…"));
+        if (digestLine != null) digestLine.setText("正在用副 API 整理记忆…（最长 90 秒）");
+        try {
+            digestPd = new ProgressDialog(this);
+            digestPd.setMessage("正在用副 API 整理记忆…");
+            digestPd.setCancelable(true);       // 允许取消，避免卡死在长请求里
+            digestPd.show();
+        } catch (Exception ignored) {
+            digestPd = null;                    // 弹窗失败不影响主流程，页内有状态行兜底
+        }
         Memory.digest(PetService.instance, (ok, d, e) -> {
+            // 回调发生在后台线程，切回主线程再碰 View
             runOnUiThread(() -> {
-                pd.dismiss();
-                if (ok) {
-                    Toast.makeText(this, "整理完成", Toast.LENGTH_SHORT).show();
-                } else {
-                    Toast.makeText(this, "整理失败：" + (e == null ? "未知错误" : e), Toast.LENGTH_LONG).show();
-                }
+                digesting = false;
+                safeDismissPd();
+                if (destroyed) return;          // 页面已经销毁，别再碰任何 View
+                if (digestBtn != null) digestBtn.setText(Ico.s(this, "🌀 立即整理"));
+                String msg = ok ? "整理完成，长期记忆已更新" : ("整理失败：" + (e == null ? "未知错误" : e));
+                if (digestLine != null) digestLine.setText(msg);
+                Toast.makeText(this, ok ? "整理完成" : msg, ok ? Toast.LENGTH_SHORT : Toast.LENGTH_LONG).show();
                 refresh();
             });
         });
+    }
+
+    /** ProgressDialog 的 dismiss 在 Activity 已销毁时会抛 "View not attached to window manager" —— 必须挡住 */
+    private void safeDismissPd() {
+        try {
+            if (digestPd != null) {
+                if (!isFinishing() && !isDestroyed()) digestPd.dismiss();
+                digestPd = null;
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        destroyed = true;
+        safeDismissPd();
+        super.onDestroy();
     }
 
     private void thresholdDialog() {

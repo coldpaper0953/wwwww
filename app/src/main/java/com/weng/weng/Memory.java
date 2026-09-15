@@ -20,6 +20,9 @@ import java.util.Locale;
  */
 public class Memory {
 
+    /** 是否有一轮整理正在跑（防止手动/自动整理并发） */
+    private static volatile boolean digesting = false;
+
     // ================= 原始记忆（rawLog: [{t, ev, reply}]） =================
 
     public static synchronized List<JSONObject> raw() {
@@ -183,6 +186,11 @@ public class Memory {
             cb.onResult(false, null, "还没有原始记忆");
             return;
         }
+        if (digesting) {                 // 手动整理与自动整理撞车时，只放行一个
+            cb.onResult(false, null, "已有一轮整理在进行中，稍等一下");
+            return;
+        }
+        digesting = true;
         final String base = subBase().isEmpty() ? pet.apiBase : subBase();
         final String key = subKey().isEmpty() ? pet.apiKey : subKey();
         final String model = subModel().isEmpty() ? pet.apiModel : subModel();
@@ -233,6 +241,7 @@ public class Memory {
             }
             final String fD = digest, fE = err;
             if (fD != null) applyDigest(fD);
+            digesting = false;
             cb.onResult(fD != null, fD, fE);
         }).start();
     }

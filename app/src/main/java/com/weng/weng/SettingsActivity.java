@@ -514,6 +514,11 @@ public class SettingsActivity extends Activity {
         aboutRow.addView(quit);
         aboutCard.addView(aboutRow);
         aboutCard.addView(gap(6));
+        // 崩溃日志查看器：Android 11+ 的 Android/data 没法用文件管理器浏览，只能在 App 内看
+        TextView crashBtn = button("⚠ 崩溃日志");
+        crashBtn.setOnClickListener(v -> showCrashLog());
+        aboutCard.addView(crashBtn);
+        aboutCard.addView(gap(6));
         TextView about = small("#AAAAAA", Gravity.CENTER);
         about.setText("嗡嗡嗡手机版 · MADE by芬芳小鼠 · 还原版");
         aboutCard.addView(about);
@@ -727,6 +732,54 @@ public class SettingsActivity extends Activity {
         workBtn.setText(Ico.s(this, PetService.instance.workMode ? "📚 工作中" : "📚 工作"));
         speedLabel.setText("×" + String.format(java.util.Locale.US, "%.1f", PetService.instance.getSpeedMul()));
         if (affVal != null) affVal.setText(String.valueOf(PetService.instance.affection));
+    }
+
+    // ================= 崩溃日志 =================
+
+    private java.io.File crashLogFile() {
+        java.io.File dir = getExternalFilesDir(null);
+        if (dir == null) dir = getFilesDir();
+        return new java.io.File(dir, "crash_log.txt");
+    }
+
+    private String readCrashLog() {
+        java.io.File f = crashLogFile();
+        if (!f.exists()) {
+            return "还没有崩溃记录～\n\n（日志会写到：" + f.getAbsolutePath() + "）";
+        }
+        try {
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            in.close();
+            String s = bos.toString("UTF-8");
+            if (s.length() > 20000) s = "…（太长，只显示最后 20000 字）\n" + s.substring(s.length() - 20000);
+            return s;
+        } catch (Exception e) {
+            return "读取失败：" + e;
+        }
+    }
+
+    private void showCrashLog() {
+        final ScrollView sv = new ScrollView(this);
+        TextView t = new TextView(this);
+        t.setTextSize(11);
+        t.setTextColor(Color.parseColor("#111111"));
+        t.setPadding(dp(12), dp(10), dp(12), dp(10));
+        t.setTextIsSelectable(true);
+        t.setText(readCrashLog());
+        sv.addView(t);
+        new AlertDialog.Builder(this)
+                .setTitle("崩溃日志")
+                .setView(sv)
+                .setPositiveButton("关闭", null)
+                .setNeutralButton("清空", (d, w) -> {
+                    try { crashLogFile().delete(); } catch (Exception ignored) {}
+                    Toast.makeText(this, "已清空", Toast.LENGTH_SHORT).show();
+                })
+                .show();
     }
 
     // ================= 主动搭话节奏 =================
