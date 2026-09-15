@@ -881,7 +881,7 @@ public class PetService extends Service implements Flyer.Host {
         long now = System.currentTimeMillis();
         if (now - liftStepAt < 100) return;
         liftStepAt = now;
-        int step = Math.max(1, Math.abs(d) / 16);
+        int step = Math.min(2, Math.max(1, Math.abs(d) / 16));
         standLiftCache += (d > 0 ? step : -step);
         if ((d > 0 && standLiftCache > standLiftTarget) || (d < 0 && standLiftCache < standLiftTarget)) {
             standLiftCache = standLiftTarget;
@@ -892,7 +892,7 @@ public class PetService extends Service implements Flyer.Host {
     private void glideYTo(float targetY) {
         float d = targetY - py;
         if (Math.abs(d) <= 1f) { py = targetY; return; }
-        float step = Math.max(3f, Math.abs(d) / 20f);
+        float step = Math.min(12f, Math.max(3f, Math.abs(d) / 20f));
         py += (d > 0 ? step : -step);
         if ((d > 0 && py > targetY) || (d < 0 && py < targetY)) py = targetY;
     }
@@ -917,7 +917,9 @@ public class PetService extends Service implements Flyer.Host {
             py = bottomLine;
             return true;
         }
-        py += (d > 0 ? DESCEND_SPEED : -DESCEND_SPEED);  // 向那条线挪（站位线调高了就往上挪）
+        // 向那条线挪：近处慢（约 80px/秒，原来那个"慢慢靠近"的手感），远处稍快但封顶 8px/帧
+        float sp = Math.min(8f, Math.max(DESCEND_SPEED, Math.abs(d) / 60f));
+        py += (d > 0 ? sp : -sp);
         px += (float) Math.sin(now / 480.0) * 0.9f;   // 缓慢飘动（正弦积分有界，不会跑偏）
         clampPet();
         petLP.x = (int) px;
@@ -989,11 +991,13 @@ public class PetService extends Service implements Flyer.Host {
                 pet.setScaleY(1f);
                 if (jumpMode) {                  // jump 模式：回到站姿待命（横移交给用户拖），不飞走
                     pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
-                } else {                         // 随机模式：飞离底部
+                } else {                         // 随机模式：飞离站立线
                     state = "cruise";
                     fly.randomizeVelocity();
-                    if (fly.vy > -1f) fly.vy = -1f;  // 保证是往上飞离底部
-                    fly.switchTo("dash", 14);
+                    fly.vy = -3.5f;                  // 必须真的往上飞离：给的上升量要超过触发带，否则会反复"站住→连跳"
+                    if (Math.abs(fly.vx) < 1.2f) fly.vx = rnd.nextBoolean() ? 1.2f : -1.2f;
+                    fly.switchTo("dash", 26);        // 约 0.8 秒的上升，够飞出 2% 的触发带
+                    nextJumpAt = System.currentTimeMillis() + 6000L;   // 再给 6 秒冷却，别刚走又回来连跳
                 }
             }
         }
@@ -1082,7 +1086,7 @@ public class PetService extends Service implements Flyer.Host {
         if (px < 0) { px = 0; vx = Math.abs(vx); }
         if (px > screenW - sz) { px = screenW - sz; vx = -Math.abs(vx); }
         if (py < 40) { py = 40; vy = Math.abs(vy); }
-        if (py > baseLine()) { py = baseLine(); vy = -Math.abs(vy); }
+        if (py > screenH - sz - 60) { py = screenH - sz - 60; vy = -Math.abs(vy); }
     }
 
     private void randomizeVelocity() {
@@ -1117,7 +1121,7 @@ public class PetService extends Service implements Flyer.Host {
                     py = 40;
                     fallVy = Math.abs(fallVy) * 0.5f;
                 }
-                float floor = baseLine();
+                float floor = screenH - sz - 60;
                 if (py >= floor) {
                     py = floor;
                     if (fallVy > 10f && fallBounces < 2) {   // 还有余劲就再弹一下
@@ -1206,7 +1210,7 @@ public class PetService extends Service implements Flyer.Host {
             // ④ 贴到底边（离底 2% 以内）→ 开始慢慢往底部挪，到站后走站立→连跳→飞走
             if (nowT2 >= nextJumpAt && !dragged && feedPhase == 0 && fly.state.equals("cruise")) {
                 float bottomLine = baseLine();
-                if (py > bottomLine - screenH * JUMP_BAND) {
+                if (Math.abs(py - bottomLine) <= screenH * JUMP_BAND) {   // 双侧判定：在线附近才算"靠底"
                     nextJumpAt = nowT2 + 1500L;          // 1.5 秒最多试一次（贴底窗口很短，别等太久）
                     if (rnd.nextInt(100) < 50) {
                         approaching = true;
@@ -1844,9 +1848,6 @@ public class PetService extends Service implements Flyer.Host {
 
     @Override
     public int screenH() { return screenH; }
-
-    @Override
-    public int floorY() { return (int) baseLine(); }   // 站立高度调高后，飞行下界也跟着抬
 
     @Override
     public int size() { return curSize(); }

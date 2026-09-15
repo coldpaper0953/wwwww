@@ -22,9 +22,6 @@ public class Flyer {
 
         int screenH();
 
-        /** 允许到达的最低 y（＝站立线；站立高度调高时这里也跟着抬高） */
-        int floorY();
-
         int size();
 
         float speedMul();
@@ -84,7 +81,7 @@ public class Flyer {
 
     private void clampPos() {
         float w = h.screenW() - h.size();
-        float hh = h.floorY();
+        float hh = h.screenH() - h.size() - 60;
         float x = h.px(), y = h.py();
         boolean bounced = false;
         if (x < 0) { x = 0; vx = Math.abs(vx); bounced = true; }
@@ -98,7 +95,7 @@ public class Flyer {
     /** 每 tick 调用（约 30ms 一次），返回是否应重绘 */
     public boolean step() {
         float x = h.px(), y = h.py();
-        int W = h.screenW(), H = h.floorY();
+        int W = h.screenW(), H = h.screenH() - 60 - h.size();
         Random r = h.rnd();
         float m = h.speedMul();
         switch (state) {
