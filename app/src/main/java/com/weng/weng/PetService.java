@@ -204,6 +204,9 @@ public class PetService extends Service implements Flyer.Host {
     private int tapCount = 0;
     private long lastTapAt = 0, downAt = 0;
 
+    private float downX, downY;
+    private boolean dragged, petted;
+
     /** 按住 0.65s 摸头（必须在 ACTION_UP 时取消，否则每次轻点后 0.66s 都会偷偷摸一次头 + 发一次 AI 请求） */
     private final Runnable handlePetRun = () -> {
         if (!dragged && System.currentTimeMillis() - downAt >= 650 && !dead) {
@@ -219,8 +222,6 @@ public class PetService extends Service implements Flyer.Host {
             showMinorBubble("打开设置啦～", 1200);
         }
     };
-    private float downX, downY;
-    private boolean dragged, petted;
     public boolean dnd = false;
     private boolean pending;
     private String updateUrl = null;
