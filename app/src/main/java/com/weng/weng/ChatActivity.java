@@ -37,6 +37,46 @@ public class ChatActivity extends Activity {
         status.setText(Ico.s(this, "🕐 " + p[0] + (app == null ? "" : " · 当前：" + app)));
         root.addView(status);
 
+        // 模式快捷切换：专注 / 勿扰 / 工作 / jump（开着的标 ●）
+        LinearLayout mRow = new LinearLayout(this);
+        mRow.setOrientation(LinearLayout.HORIZONTAL);
+        final TextView[] modes = new TextView[4];
+        for (int i = 0; i < 4; i++) {
+            final int idx = i;
+            TextView btn = new TextView(this);
+            btn.setTextSize(12);
+            btn.setTypeface(Typeface.DEFAULT_BOLD);
+            btn.setTextColor(Color.parseColor("#111111"));
+            btn.setGravity(Gravity.CENTER);
+            btn.setPadding(dp(8), dp(8), dp(8), dp(8));
+            GradientDrawable mb = new GradientDrawable();
+            mb.setColor(Color.WHITE);
+            mb.setCornerRadius(dp(10));
+            mb.setStroke(dp(2), Color.parseColor("#111111"));
+            btn.setBackground(mb);
+            btn.setOnClickListener(v -> {
+                if (PetService.instance == null) return;
+                if (idx == 0) PetService.instance.toggleFocusQuick();
+                else if (idx == 1) PetService.instance.toggleDnd();
+                else if (idx == 2) PetService.instance.toggleWork();
+                else PetService.instance.toggleJumpMode();
+                syncModeButtons(modes);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            lp.rightMargin = i < 3 ? dp(6) : 0;
+            mRow.addView(btn, lp);
+            modes[i] = btn;
+        }
+        root.addView(mRow);
+        syncModeButtons(modes);
+        TextView mHint = new TextView(this);
+        mHint.setTextSize(10);
+        mHint.setTextColor(Color.parseColor("#999999"));
+        mHint.setPadding(dp(4), dp(4), dp(4), dp(6));
+        mHint.setText("模式快捷切换（● = 已开启）");
+        root.addView(mHint);
+
         // 输入 + 发送（就一行）
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
@@ -77,6 +117,15 @@ public class ChatActivity extends Activity {
         // 自动聚焦输入框并弹软键盘
         in.requestFocus();
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+    }
+
+    /** 按当前状态刷新四个模式按钮的文字 */
+    private void syncModeButtons(TextView[] b) {
+        if (PetService.instance == null || b == null || b.length < 4) return;
+        b[0].setText(Ico.s(this, (PetService.instance.isFocusing() ? "● " : "") + "专注"));
+        b[1].setText(Ico.s(this, (PetService.instance.isDnd() ? "● " : "") + "勿扰"));
+        b[2].setText(Ico.s(this, (PetService.instance.isWork() ? "● " : "") + "工作"));
+        b[3].setText(Ico.s(this, (PetService.instance.isJumpMode() ? "● " : "") + "jump"));
     }
 
     private int dp(float v) { return (int) (v * getResources().getDisplayMetrics().density); }

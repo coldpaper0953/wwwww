@@ -35,6 +35,9 @@ public class SettingsActivity extends Activity {
     private TextView satLabel;
     private android.widget.SeekBar chatGapSlider, chatJitSlider, chatCapSlider;
     private TextView chatGapVal, chatJitVal, chatCapVal, chatCountVal;
+    private android.widget.SeekBar jumpPctSlider;
+    private TextView jumpPctVal;
+    private TextView jumpModeBtn;
     private boolean chatDragging = false;
 
     private final Runnable uiRefresher = new Runnable() {
@@ -174,6 +177,25 @@ public class SettingsActivity extends Activity {
         });
         speedRow.addView(faster);
         petCard.addView(speedRow);
+        petCard.addView(gap(8));
+
+        // 跳跃高度（占屏幕高度的百分比）
+        petCard.addView(rowLabel("跳跃高度（屏幕高度的百分之几）"));
+        LinearLayout jhRow = new LinearLayout(this);
+        jhRow.setOrientation(LinearLayout.HORIZONTAL);
+        jumpPctSlider = new android.widget.SeekBar(this);
+        jumpPctSlider.setMax(36);                       // 4% ~ 40%
+        jumpPctSlider.setProgress(clampInt(DataStore.getInt("jumpPct", 14), 4, 40) - 4);
+        jhRow.addView(jumpPctSlider,
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        jumpPctVal = valueLabel();
+        jhRow.addView(jumpPctVal);
+        jumpPctSlider.setOnSeekBarChangeListener(seeker(() -> {
+            int pct = jumpPctSlider.getProgress() + 4;
+            DataStore.putInt("jumpPct", pct);
+            jumpPctVal.setText(pct + "%");
+        }));
+        petCard.addView(jhRow);
         petCard.addView(gap(8));
 
         petCard.addView(rowLabel("好感度（可手动改）"));
@@ -421,6 +443,16 @@ public class SettingsActivity extends Activity {
         });
         tabRow.addView(senseBtn);
         ixCard.addView(tabRow);
+        ixCard.addView(gap(6));
+        // jump 模式（也可以在屏幕右缘拉手里快捷切换）
+        jumpModeBtn = button("🏃 jump模式：关");
+        jumpModeBtn.setOnClickListener(v -> {
+            if (PetService.instance != null) {
+                PetService.instance.toggleJumpMode();
+                refresh();
+            }
+        });
+        ixCard.addView(jumpModeBtn);
         root.addView(ixCard);
         root.addView(gap(10));
 
@@ -711,6 +743,8 @@ public class SettingsActivity extends Activity {
         affLabel.setText(Ico.s(this, "❤ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天"));
         if (emoLine != null) emoLine.setText(Ico.s(this, "🧠 " + PetService.instance.emo.describe()));
         if (feedLine != null) feedLine.setText(Ico.s(this, "🩸 " + PetService.instance.donationStatusText()));
+        if (jumpModeBtn != null) jumpModeBtn.setText(Ico.s(this,
+                PetService.instance.isJumpMode() ? "🏃 jump模式：开" : "🏃 jump模式：关"));
         refreshSatietyBar();
         if (prankScore != null) prankScore.setText(Ico.s(this, "📊 " + PetService.instance.prankScoreText()));
         if (prankBtn != null) prankBtn.setText(Ico.s(this, PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏"));
@@ -787,8 +821,7 @@ public class SettingsActivity extends Activity {
     /** 同步三根滑块 + 今日已主动搭话条数 */
     private void refreshChatSettings() {
         if (chatGapSlider == null) return;
-        int gap = clampInt(Math.round(DataStore.getFloat("chatGapMin", 10f)), 5, 120);
-        int jit = clampInt(DataStore.getInt("chatJitter", 50), 0, 100);
+        int gap = clampInt(Math.round(DataStore.getFloat("chatGapMin", 10f)), 5, 120);        int jit = clampInt(DataStore.getInt("chatJitter", 50), 0, 100);
         int cap = clampInt(DataStore.getInt("chatDailyCap", 0), 0, 60);
         if (!chatDragging) {
             chatGapSlider.setProgress(gap - 5);
@@ -804,6 +837,10 @@ public class SettingsActivity extends Activity {
         int sent = DataStore.sp().getInt("chatCount", 0);
         chatCountVal.setText("实际触发 " + lo + " ~ " + hi + " 分钟一次　·　今天已主动搭话 "
                 + sent + (cap == 0 ? " 条（不限量）" : "/" + cap + " 条"));
+        // 跳跃高度
+        int pct = clampInt(DataStore.getInt("jumpPct", 14), 4, 40);
+        if (jumpPctSlider != null && !chatDragging) jumpPctSlider.setProgress(pct - 4);
+        if (jumpPctVal != null) jumpPctVal.setText(pct + "%");
     }
 
     private static int clampInt(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }

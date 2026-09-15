@@ -27,6 +27,7 @@ public class Ico {
 
     static {
         MAP.put("🏆", "ic_trophyaward");
+        MAP.put("🏃", "ic_run");
         MAP.put("💬", "ic_chat");
         MAP.put("🩸", "ic_bloodbag");
         MAP.put("💧", "ic_water");
