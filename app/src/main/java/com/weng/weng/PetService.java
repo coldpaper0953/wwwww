@@ -566,6 +566,11 @@ public class PetService extends Service implements Flyer.Host {
                         dragged = true;   // 捏合不算拖拽/手势
                     }
                     return true;
+                case MotionEvent.ACTION_POINTER_UP:
+                    // 抬起一根手指即退出捏合：pinchStartDist 不清掉会残留，
+                    // 下一次点击会在 ACTION_UP 开头被"捏合结束"分支吞掉（点了没反应）
+                    pinchStartDist = 0;
+                    return true;
                 case MotionEvent.ACTION_MOVE:
                     if (ev.getPointerCount() == 2 && pinchStartDist > 0) {
                         float d = fingerDist(ev);
@@ -625,10 +630,12 @@ public class PetService extends Service implements Flyer.Host {
                         lastInteractAt = nowJ;
                         dragged = false;
                         petted = false;
-                        if (dist < 60) {                        // 轻点：向上平移 n 再落回
-                            jumpBaseY = py;
+                        if (dist < 60) {                        // 轻点：向上平移「跳跃高度」再落回
+                            jumpBaseY = baseLine();
+                            py = jumpBaseY;
                             jumpHopsLeft = 1;
                             beginHop(nowJ);
+                            showBubble("跳！", 800);
                             awardAff(1);
                         } else {                                // 拖动结束：贴回站立线
                             py = baseLine();
@@ -675,9 +682,6 @@ public class PetService extends Service implements Flyer.Host {
                             showMinorBubble(tapCount == 1 ? "嗯？" : "别闹…", 1800);
                             awardAff(1);
                             aiChat(tapCount == 1 ? "用户戳了你一下" : "用户又戳了你一下，这是第 " + tapCount + " 次");
-                            jumpBaseY = py;              // 点一下就向上平移一小段再落回
-                            jumpHopsLeft = 1;
-                            beginHop(now);
                         }
                     } else if (dur >= 1500) {             // 长按拥抱
                         fly.switchTo("sleepy", 300);
