@@ -37,6 +37,8 @@ public class SettingsActivity extends Activity {
     private TextView chatGapVal, chatJitVal, chatCapVal, chatCountVal;
     private android.widget.SeekBar jumpPctSlider;
     private TextView jumpPctVal;
+    private android.widget.SeekBar standLiftSlider;
+    private TextView standLiftVal;
     private TextView jumpModeBtn;
     private boolean chatDragging = false;
 
@@ -179,8 +181,8 @@ public class SettingsActivity extends Activity {
         petCard.addView(speedRow);
         petCard.addView(gap(8));
 
-        // 跳跃高度（占屏幕高度的百分比）
-        petCard.addView(rowLabel("跳跃高度（屏幕高度的百分之几）"));
+        // 跳跃高度（占屏幕高度的百分比）—— 管的是"一跳多高"，不管站在哪
+        petCard.addView(rowLabel("跳跃高度（一下跳多高，占屏高百分之几）"));
         LinearLayout jhRow = new LinearLayout(this);
         jhRow.setOrientation(LinearLayout.HORIZONTAL);
         jumpPctSlider = new android.widget.SeekBar(this);
@@ -196,6 +198,26 @@ public class SettingsActivity extends Activity {
             jumpPctVal.setText(pct + "%");
         }));
         petCard.addView(jhRow);
+        petCard.addView(gap(8));
+
+        // 站立高度（离屏幕底部多高）—— 管的是"站在哪一层"
+        petCard.addView(rowLabel("站立高度（离屏幕底部多高，0% ＝ 贴底）"));
+        LinearLayout shRow = new LinearLayout(this);
+        shRow.setOrientation(LinearLayout.HORIZONTAL);
+        standLiftSlider = new android.widget.SeekBar(this);
+        standLiftSlider.setMax(50);                     // 0% ~ 50%
+        standLiftSlider.setProgress(clampInt(DataStore.getInt("standLift", 0), 0, 50));
+        shRow.addView(standLiftSlider,
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        standLiftVal = valueLabel();
+        shRow.addView(standLiftVal);
+        standLiftSlider.setOnSeekBarChangeListener(seeker(() -> {
+            int lp = standLiftSlider.getProgress();
+            DataStore.putInt("standLift", lp);
+            if (PetService.instance != null) PetService.instance.setStandLift(lp);   // 立刻生效，可当场看效果
+            standLiftVal.setText(lp == 0 ? "贴底" : "离底 " + lp + "%");
+        }));
+        petCard.addView(shRow);
         petCard.addView(gap(8));
 
         petCard.addView(rowLabel("好感度（可手动改）"));
@@ -841,6 +863,10 @@ public class SettingsActivity extends Activity {
         int pct = clampInt(DataStore.getInt("jumpPct", 14), 4, 40);
         if (jumpPctSlider != null && !chatDragging) jumpPctSlider.setProgress(pct - 4);
         if (jumpPctVal != null) jumpPctVal.setText(pct + "%");
+        // 站立高度
+        int lift = clampInt(DataStore.getInt("standLift", 0), 0, 50);
+        if (standLiftSlider != null && !chatDragging) standLiftSlider.setProgress(lift);
+        if (standLiftVal != null) standLiftVal.setText(lift == 0 ? "贴底" : "离底 " + lift + "%");
     }
 
     private static int clampInt(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }

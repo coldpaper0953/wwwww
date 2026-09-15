@@ -188,7 +188,14 @@ public class PetService extends Service implements Flyer.Host {
     private boolean dndStand = false;    // 这次站立是勿扰带来的（勿扰一关就立刻开始跳）
     private long standUntil = 0;
     private float standY = 0;
-    /** jump 模式：锁在屏幕最底部、自己左右滑，点一下才跳 */
+    /** 站立高度（离屏幕底部多高，占屏高百分比；0 = 贴底）——生效值，-1 表示还没从存档读过 */
+    private int standLiftCache = -1;
+    /** 设置页给的目标值（生效值每帧追它，避免整条站立线瞬间跳变） */
+    private int standLiftTarget = -1;
+    private long liftStepAt = 0;
+    /** 站立高度上限（屏高百分比） */
+    private static final int STAND_LIFT_MAX = 50;
+    /** jump 模式：站在屏幕底部那条线上、只左右挪，点一下才跳 */
     public boolean jumpMode = false;
     /** 下降速度（像素/帧；tick 30ms → 约 80px/秒，慢悠悠挪过去） */
     private static final float DESCEND_SPEED = 2.4f;
@@ -302,6 +309,8 @@ public class PetService extends Service implements Flyer.Host {
         emo.load();
         petScale = DataStore.getFloat("petScale", 1f);
         jumpMode = DataStore.getBool("jumpMode", false);
+        standLiftCache = Math.max(0, Math.min(STAND_LIFT_MAX, DataStore.getInt("standLift", 0)));
+        standLiftTarget = standLiftCache;
         fly = new Flyer(this);
         startedAt = System.currentTimeMillis();
         lastInteractAt = startedAt;
@@ -586,7 +595,7 @@ public class PetService extends Service implements Flyer.Host {
                         lastMoveAt = nowT;
                         px = mx - curSize() / 2f;
                         py = my - curSize() / 2f;
-                        if (jumpMode) py = screenH - curSize() - 60;   // jump 模式只能左右挪，不能脱离底部
+                        if (jumpMode) py = baseLine();   // jump 模式只能左右挪，不能脱离站立线
                         clampPet();
                         petLP.x = (int) px;
                         petLP.y = (int) py;
@@ -618,14 +627,14 @@ public class PetService extends Service implements Flyer.Host {
                         petted = false;
                         if (dist < 60) {                        // 轻点：跳两下
                             if (nowJ >= jumpUntil) {
-                                jumpBaseY = screenH - curSize() - 60;
+                                jumpBaseY = baseLine();
                                 py = jumpBaseY;
                                 jumpHopsLeft = 2;
                                 beginHop(nowJ);
                                 awardAff(1);
                             }
                         } else {                                // 拖动结束：贴回底部
-                            py = screenH - curSize() - 60;
+                            py = baseLine();
                             clampPet();
                             petLP.x = (int) px;
                             petLP.y = (int) py;
@@ -842,18 +851,73 @@ public class PetService extends Service implements Flyer.Host {
     // ---------------- 底部演出：靠近 → 站立 → 连跳 → 飞走（素材来自 assets/jump.gif）----------------
 
     /**
-     * 一点点挪向屏幕底部（每帧约 2.4px，约 80px/秒），下落过程带一点左右轻飘。
-     * 返回 true 表示已经贴到底边。**不要在这里直接瞬移到底部** —— 那会看起来像"忽然掉下去"。
+     * 站立基准线（y 坐标）：屏幕底部往上抬「站立高度」那么多。
+     * 0% 时就是原先的贴底位置；调高之后，jump 模式、底部演出、勿扰站桩都以这条线为地面。
+     */
+    private float baseLine() {
+        return screenH - curSize() - 60 - screenH * standLiftPct() / 100f;
+    }
+
+    private int standLiftPct() {
+        if (standLiftCache < 0) {
+            int v = Math.max(0, Math.min(STAND_LIFT_MAX, DataStore.getInt("standLift", 0)));
+            standLiftCache = v;
+            standLiftTarget = v;
+        }
+        return standLiftCache;
+    }
+
+    /** 当前站立高度（屏高百分比，取生效值） */
+    public int getStandLiftPct() { return standLiftPct(); }
+
+    /**
+     * 站立线平滑逼近目标：约每 0.1 秒挪一点，离目标越远挪得越多。
+     * 这样拖滑块时那条线是"长上去 / 落下来"的，蚊子不会瞬间弹到新位置。
+     */
+    private void stepStandLift() {
+        if (standLiftTarget < 0) standLiftTarget = standLiftPct();
+        int d = standLiftTarget - standLiftCache;
+        if (d == 0) return;
+        long now = System.currentTimeMillis();
+        if (now - liftStepAt < 100) return;
+        liftStepAt = now;
+        int step = Math.max(1, Math.abs(d) / 16);
+        standLiftCache += (d > 0 ? step : -step);
+        if ((d > 0 && standLiftCache > standLiftTarget) || (d < 0 && standLiftCache < standLiftTarget)) {
+            standLiftCache = standLiftTarget;
+        }
+    }
+
+    /** 让 py 平滑滑向目标线：每帧挪 max(3, 距离/20) 像素，到得近就直接对齐（不瞬移） */
+    private void glideYTo(float targetY) {
+        float d = targetY - py;
+        if (Math.abs(d) <= 1f) { py = targetY; return; }
+        float step = Math.max(3f, Math.abs(d) / 20f);
+        py += (d > 0 ? step : -step);
+        if ((d > 0 && py > targetY) || (d < 0 && py < targetY)) py = targetY;
+    }
+
+    /** 设置页拖动「站立高度」时调用：只更新目标，实际站位由 stepStandLift 平滑追过去 */
+    public void setStandLift(int pct) {
+        pct = Math.max(0, Math.min(STAND_LIFT_MAX, pct));
+        if (standLiftTarget < 0) standLiftPct();      // 先把存档值读进来
+        standLiftTarget = pct;
+        DataStore.putInt("standLift", pct);
+    }
+
+    /**
+     * 一点点挪向站立线（每帧约 2.4px，约 80px/秒），路上带一点左右轻飘。
+     * 返回 true 表示已经到线上了。**不要在这里直接瞬移** —— 那会看起来像"忽然掉下去"。
      */
     private boolean descendToBottom(long now) {
-        float bottomLine = screenH - curSize() - 60;
+        float bottomLine = baseLine();
         standY = bottomLine;
-        if (py >= bottomLine - 1f) {
+        float d = bottomLine - py;
+        if (Math.abs(d) <= DESCEND_SPEED) {              // 到线上了
             py = bottomLine;
             return true;
         }
-        py += DESCEND_SPEED;
-        if (py > bottomLine) py = bottomLine;
+        py += (d > 0 ? DESCEND_SPEED : -DESCEND_SPEED);  // 向那条线挪（站位线调高了就往上挪）
         px += (float) Math.sin(now / 480.0) * 0.9f;   // 缓慢飘动（正弦积分有界，不会跑偏）
         clampPet();
         petLP.x = (int) px;
@@ -868,7 +932,7 @@ public class PetService extends Service implements Flyer.Host {
         standing = true;
         approaching = false;
         dndStand = fromDnd;
-        standY = screenH - curSize() - 60;
+        standY = baseLine();
         py = standY;
         standUntil = now + standMs;
         jumpUntil = 0;
@@ -936,17 +1000,17 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     /**
-     * jump 模式：锁在屏幕最底部，自己左右平移到边就反向，站着不动；
-     * 戳它一下才跳（跳跃复用的是底部演出那一套帧与弹性）。
+     * jump 模式：站在「站立线」上（纵向不吃拖动，横向随用户拖），
+     * 戳它一下才跳（复用底部演出那一套帧与弹性）。
      */
     private void jumpModeTick(long now) {
-        float bottomLine = screenH - curSize() - 60;
+        float bottomLine = baseLine();
         standY = bottomLine;
         if (now < jumpUntil) {                 // 点击触发的跳跃进行中
             jumpTick(now);
             return;
         }
-        py = bottomLine;                       // 不自动平移：位置由用户拖动决定
+        glideYTo(bottomLine);                  // 平滑滑到站立线上（刚开模式 / 拖滑块都不瞬移）；横向位置由用户拖
         pet.setScaleX(1f);
         pet.setScaleY(1f);
         pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
@@ -974,7 +1038,7 @@ public class PetService extends Service implements Flyer.Host {
         if (on) {
             if (dnd) { dnd = false; }
             if (workMode) { workMode = false; }
-            standY = py = screenH - curSize() - 60;
+            standY = baseLine();                 // 纵向不瞬移：jumpModeTick 会平滑把它滑到线上
             px = Math.max(0, Math.min(screenW - curSize(), px));
             hopDrift = 0f;                       // 不自动平移，位置由用户拖
             state = "jump";
@@ -1018,7 +1082,7 @@ public class PetService extends Service implements Flyer.Host {
         if (px < 0) { px = 0; vx = Math.abs(vx); }
         if (px > screenW - sz) { px = screenW - sz; vx = -Math.abs(vx); }
         if (py < 40) { py = 40; vy = Math.abs(vy); }
-        if (py > screenH - sz - 60) { py = screenH - sz - 60; vy = -Math.abs(vy); }
+        if (py > baseLine()) { py = baseLine(); vy = -Math.abs(vy); }
     }
 
     private void randomizeVelocity() {
@@ -1033,6 +1097,7 @@ public class PetService extends Service implements Flyer.Host {
         public void run() {
             handler.postDelayed(this, 30);
             if (dead) return;
+            stepStandLift();          // 站立线平滑逼近（拖滑块时不瞬移）
             feedTick();
             if (state.equals("falling")) {
                 // 抛物线：横向带着松手时的速度、竖直方向受重力加速下落，撞左右墙会衰减反弹
@@ -1052,7 +1117,7 @@ public class PetService extends Service implements Flyer.Host {
                     py = 40;
                     fallVy = Math.abs(fallVy) * 0.5f;
                 }
-                float floor = screenH - sz - 60;
+                float floor = baseLine();
                 if (py >= floor) {
                     py = floor;
                     if (fallVy > 10f && fallBounces < 2) {   // 还有余劲就再弹一下
@@ -1079,6 +1144,7 @@ public class PetService extends Service implements Flyer.Host {
             if (dnd) {              // 勿扰：慢慢沉到屏幕底部，然后站着不动
                 long nowD = System.currentTimeMillis();
                 if (standing) {
+                    standY = baseLine();       // 站立线在动（拖滑块）时跟着走
                     py = standY;
                     petLP.x = (int) px;
                     petLP.y = (int) py;
@@ -1107,8 +1173,9 @@ public class PetService extends Service implements Flyer.Host {
                 return;
             }
 
-            // ② 站在底部：轻轻晃着等一会儿，再开始连跳（勿扰就一直站）
+            // ② 站在站立线上：轻轻晃着等一会儿，再开始连跳（勿扰就一直站）
             if (standing) {
+                standY = baseLine();
                 py = standY;
                 px += (float) Math.sin(nowT2 / 700.0) * 0.35f;   // 极缓的左右轻晃（平滑正弦，别用随机）
                 clampPet();
@@ -1138,7 +1205,7 @@ public class PetService extends Service implements Flyer.Host {
 
             // ④ 贴到底边（离底 2% 以内）→ 开始慢慢往底部挪，到站后走站立→连跳→飞走
             if (nowT2 >= nextJumpAt && !dragged && feedPhase == 0 && fly.state.equals("cruise")) {
-                float bottomLine = screenH - curSize() - 60;
+                float bottomLine = baseLine();
                 if (py > bottomLine - screenH * JUMP_BAND) {
                     nextJumpAt = nowT2 + 1500L;          // 1.5 秒最多试一次（贴底窗口很短，别等太久）
                     if (rnd.nextInt(100) < 50) {
@@ -1777,6 +1844,9 @@ public class PetService extends Service implements Flyer.Host {
 
     @Override
     public int screenH() { return screenH; }
+
+    @Override
+    public int floorY() { return (int) baseLine(); }   // 站立高度调高后，飞行下界也跟着抬
 
     @Override
     public int size() { return curSize(); }
