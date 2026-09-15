@@ -626,7 +626,7 @@ public class PetService extends Service implements Flyer.Host {
                         dragged = false;
                         petted = false;
                         if (dist < 60) {                        // 轻点：跳两下
-                            if (nowJ >= jumpUntil) {
+                            if (nowJ >= jumpUntil || py >= jumpBaseY - 2f) {   // 没在跳，或这一跳已落地 → 立刻重跳
                                 jumpBaseY = baseLine();
                                 py = jumpBaseY;
                                 jumpHopsLeft = 2;
@@ -948,6 +948,7 @@ public class PetService extends Service implements Flyer.Host {
     private void beginHop(long now) {        hopMs = HOP_MIN_MS + rnd.nextFloat() * (HOP_MAX_MS - HOP_MIN_MS);
         int pct = Math.max(4, Math.min(40, DataStore.getInt("jumpPct", 14)));
         hopAmp = screenH * pct / 100f;
+        if (hopAmp > jumpBaseY - 60f) hopAmp = Math.max(60f, jumpBaseY - 60f);   // 弧顶不许飞出屏幕
         if (Math.abs(hopDrift) < 0.01f) hopDrift = rnd.nextBoolean() ? HOP_DRIFT_STEP : -HOP_DRIFT_STEP;
         if (jumpMode) hopDrift = 0f;         // jump 模式原地跳，横移交给用户拖
         jumpIdx = -1;
@@ -960,23 +961,36 @@ public class PetService extends Service implements Flyer.Host {
      * 并用 cos 相位做落地压扁/腾空拉伸，落地后接下一跳或收尾。
      */
     private void jumpTick(long now) {
-        float t = 1f - (jumpUntil - now) / hopMs;
+        float t = 1f - (jumpUntil - now) / hopMs;    // 整个周期 0..1（= "每 0.5~2 秒一次"的节奏）
         if (t < 0f) t = 0f;
         if (t > 1f) t = 1f;
-        py = jumpBaseY - (float) Math.sin(Math.PI * t) * hopAmp;
+        // 空中相位：只占周期前一小段（≤550ms），保证"跳"是短促有力的，剩下时间落地站姿
+        float airMs = Math.min(0.45f * hopMs, 550f);
+        float at = t * hopMs / airMs;                // 0..1，超过 1 = 已落地
+        if (at < 1f) {
+            py = jumpBaseY - (float) Math.sin(Math.PI * at) * hopAmp;
+            // 弹性缩放：落地压扁 / 腾空拉伸（连续曲线，不会一格一格跳）
+            float phase = (float) Math.cos(2 * Math.PI * at);
+            pet.setScaleX(1f + 0.10f * phase);
+            pet.setScaleY(1f - 0.14f * phase);
+            int idx = Math.min(4, (int) (at * 5f));  // 5 帧 9~18fps，不再像幻灯片
+            if (idx != jumpIdx) {
+                jumpIdx = idx;
+                pet.setImageResource(jumpF[idx] != 0 ? jumpF[idx] : cruiseF[0]);
+            }
+        } else {                                     // 已落地：站姿等下一跳
+            py = jumpBaseY;
+            pet.setScaleX(1f);
+            pet.setScaleY(1f);
+            if (jumpIdx != 0) {
+                jumpIdx = 0;
+                pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
+            }
+        }
         // 横向漂移：像在底边"走"着弹，不再原地干蹦
         px += hopDrift;
         if (px < 0) { px = 0; hopDrift = Math.abs(hopDrift); }
         else if (px > screenW - curSize()) { px = screenW - curSize(); hopDrift = -Math.abs(hopDrift); }
-        // 弹性缩放：t=0/1 落地压扁，t=0.5 腾空拉伸（连续曲线，不会一格一格跳）
-        float phase = (float) Math.cos(2 * Math.PI * t);
-        pet.setScaleX(1f + 0.10f * phase);
-        pet.setScaleY(1f - 0.14f * phase);
-        int idx = Math.min(4, (int) (t * 5f));
-        if (idx != jumpIdx) {                   // 只在换帧时改图，省一次 setImageResource
-            jumpIdx = idx;
-            pet.setImageResource(jumpF[idx] != 0 ? jumpF[idx] : cruiseF[0]);
-        }
         petLP.x = (int) px;
         petLP.y = (int) py;
         try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
