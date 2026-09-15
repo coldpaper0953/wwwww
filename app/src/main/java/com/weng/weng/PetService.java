@@ -174,10 +174,16 @@ public class PetService extends Service implements Flyer.Host {
     private int[] jumpF = new int[5];              // 底部跳跃（来自 assets/jump.gif）
     private int frameIdx = 0, emoIdx = 0, emoLoops = 0;
 
-    // ---- 底部跳跃：贴近屏幕下方时有机会蹦一下 ----
+    // ---- 底部演出：贴近屏幕下方 → 站立 → 连跳几下 → 飞走 ----
+    //（勿扰模式下只有"站到底部站着不动"，不跳也不飞）
     private long jumpUntil = 0, nextJumpAt = 0;
     private float jumpBaseY = 0;
     private int jumpIdx = -1;
+    private int jumpHopsLeft = 0;        // 还要连跳几下
+    private boolean standing = false;    // 是否正站在屏幕底部
+    private boolean dndStand = false;    // 这次站立是勿扰带来的（勿扰一关就立刻开始跳）
+    private long standUntil = 0;
+    private float standY = 0;
     private static final long JUMP_MS = 900L;
     /** 离底部多远算"靠近"（占屏高比例） */
     private static final float JUMP_BAND = 0.18f;
@@ -544,8 +550,10 @@ public class PetService extends Service implements Flyer.Host {
                     float mx = ev.getRawX(), my = ev.getRawY();
                     if (Math.hypot(mx - downX, my - downY) > 18) {
                         dragged = true;
-                        if (jumpUntil != 0) {        // 用户手动拖了，立刻收掉跳跃，别把宠物拽回原地
+                        if (jumpUntil != 0 || standing) {   // 用户手动拖了，立刻收掉底部演出
                             jumpUntil = 0;
+                            standing = false;
+                            dndStand = false;
                             state = "cruise";
                         }
                         // 速度采样（松手惯性用）：记最近一次 MOVE 的位移/时间
@@ -779,21 +787,26 @@ public class PetService extends Service implements Flyer.Host {
         fallVy = vy0;
         if (Math.abs(fallVx) < 1f && fallVy > -3f) fallVy = -5f;
         fallBounces = 0;
-        jumpUntil = 0;          // 被甩出去就打断跳跃，免得落地后又接着跳
+        jumpUntil = 0;          // 被甩出去就打断底部演出，免得落地后又接着跳
+        standing = false;
+        dndStand = false;
         state = "falling";
     }
 
-    // ---------------- 底部跳跃（assets/jump.gif 的 5 帧）----------------
+    // ---------------- 底部演出：站立 → 连跳 → 飞走（素材来自 assets/jump.gif）----------------
 
-    /** 起跳：记下基准高度，之后按正弦弧线上下弹 */
-    private void startJump() {
-        jumpUntil = System.currentTimeMillis() + JUMP_MS;
-        jumpBaseY = Math.min(py, screenH - curSize() - 60);
-        jumpIdx = -1;
-        state = "jumping";
+    /** 站到底部：贴住底边、换成站立帧，站到 standMs 之后（勿扰来的站立会一直续期） */
+    private void startStand(long now, long standMs, boolean fromDnd) {
+        standing = true;
+        dndStand = fromDnd;
+        standY = screenH - curSize() - 60;
+        standUntil = now + standMs;
+        jumpUntil = 0;
+        state = "stand";
+        pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
     }
 
-    /** 跳跃进行中：t 从 0 走到 1，位置走一个正弦抛物线，同时依次播 5 帧 */
+    /** 跳跃进行中：t 从 0 走到 1，位置走一个正弦抛物线，同时依次播 5 帧；落地后接下一跳或飞走 */
     private void jumpTick(long now) {
         float t = 1f - (jumpUntil - now) / (float) JUMP_MS;
         if (t < 0f) t = 0f;
@@ -808,11 +821,18 @@ public class PetService extends Service implements Flyer.Host {
         petLP.y = (int) py;
         try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
         if (bubble.getVisibility() == View.VISIBLE) placeBubble();
-        if (t >= 1f) {                          // 落地，交还给巡航
+        if (t >= 1f) {
             py = jumpBaseY;
-            jumpUntil = 0;
-            state = "cruise";
-            fly.switchTo("cruise", 0);
+            if (--jumpHopsLeft > 0) {            // 还有劲：接着跳
+                jumpIdx = -1;
+                jumpUntil = now + JUMP_MS;
+            } else {                             // 跳够了 → 飞走
+                jumpUntil = 0;
+                state = "cruise";
+                fly.randomizeVelocity();
+                if (fly.vy > -1f) fly.vy = -1f;  // 保证是往上飞离底部
+                fly.switchTo("dash", 14);
+            }
         }
     }
 
@@ -837,18 +857,6 @@ public class PetService extends Service implements Flyer.Host {
             handler.postDelayed(this, 30);
             if (dead) return;
             feedTick();
-            if (napping) return;
-            if (workMode) return;   // 工作模式悬停不动
-            if (dnd) {              // 勿扰：安静沿边巡逻
-                if (!fly.state.equals("edge_walk")) fly.switchTo("edge_walk", 0);
-                fly.ax = fly.ax == 0 && fly.lastSwitchAt == 0 ? 0 : fly.ax;
-                fly.step();
-                petLP.x = (int) px;
-                petLP.y = (int) py;
-                try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
-                if (bubble.getVisibility() == View.VISIBLE) placeBubble();
-                return;
-            }
             if (state.equals("falling")) {
                 // 抛物线：横向带着松手时的速度、竖直方向受重力加速下落，撞左右墙会衰减反弹
                 int sz = curSize();
@@ -888,19 +896,74 @@ public class PetService extends Service implements Flyer.Host {
                 if (bubble.getVisibility() == View.VISIBLE) placeBubble();
                 return;
             }
+            if (napping) return;
+            if (workMode) return;   // 工作模式悬停不动
+            if (dnd) {              // 勿扰：安静地沉到屏幕底部，然后站着不动
+                long nowD = System.currentTimeMillis();
+                float bottomLine = screenH - curSize() - 60;
+                if (standing) {
+                    py = standY;
+                    petLP.x = (int) px;
+                    petLP.y = (int) py;
+                    try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                    if (bubble.getVisibility() == View.VISIBLE) placeBubble();
+                    dndStand = true;
+                    if (nowD >= standUntil) standUntil = nowD + 600000L;   // 一直站着
+                    return;
+                }
+                if (py < bottomLine - 1f) {          // 还没到底：慢慢往下沉
+                    py += 2.5f;
+                    if (py > bottomLine) py = bottomLine;
+                    px += (rnd.nextFloat() - 0.5f) * 1.2f;   // 下沉时轻微飘一下
+                    clampPet();
+                    petLP.x = (int) px;
+                    petLP.y = (int) py;
+                    try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                    if (bubble.getVisibility() == View.VISIBLE) placeBubble();
+                    return;
+                }
+                startStand(nowD, 600000L, true);     // 到底了 → 站住
+                return;
+            }
             // 常规：Flyer 状态机驱动（falling 由上面处理；flyer 的 cruise 内含撞边反弹）
             long nowT2 = System.currentTimeMillis();
-            if (nowT2 < jumpUntil) {          // 跳跃演出中：位置和帧都由 jumpTick 接管
+
+            // ① 站在底部：先站一会儿，再开始连跳（勿扰就一直站）
+            if (standing) {
+                py = standY;
+                petLP.x = (int) px;
+                petLP.y = (int) py;
+                try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                if (bubble.getVisibility() == View.VISIBLE) placeBubble();
+                if (nowT2 >= standUntil || (dndStand && !dnd)) {
+                    if (dnd) {
+                        standUntil = nowT2 + 600000L;
+                    } else {
+                        dndStand = false;
+                        standing = false;
+                        jumpHopsLeft = 2 + rnd.nextInt(3);   // 连跳 2~4 下
+                        jumpBaseY = standY;
+                        jumpIdx = -1;
+                        jumpUntil = nowT2 + JUMP_MS;
+                        state = "jumping";
+                    }
+                }
+                return;
+            }
+
+            // ② 跳跃演出中：位置和帧都由 jumpTick 接管
+            if (nowT2 < jumpUntil) {
                 jumpTick(nowT2);
                 return;
             }
-            // 靠近屏幕底部 → 有机会蹦一下
+
+            // ③ 靠近屏幕底部 → 站到底部（然后走上面的流程跳几下再飞走）
             if (nowT2 >= nextJumpAt && !dragged && feedPhase == 0 && fly.state.equals("cruise")) {
                 float bottomLine = screenH - curSize() - 60;
                 if (py > bottomLine - screenH * JUMP_BAND) {
-                    nextJumpAt = nowT2 + 4000L;      // 每 4 秒最多试一次
-                    if (rnd.nextInt(100) < 35) {
-                        startJump();
+                    nextJumpAt = nowT2 + 6000L;          // 每 6 秒最多试一次
+                    if (rnd.nextInt(100) < 40) {
+                        startStand(nowT2, 1500L + rnd.nextInt(2500), false);   // 先站 1.5~4 秒
                         return;
                     }
                 }
@@ -927,7 +990,7 @@ public class PetService extends Service implements Flyer.Host {
                 pet.setImageResource(deadRes != 0 ? deadRes : cruiseF[0]);
                 return;
             }
-            if (System.currentTimeMillis() < jumpUntil) return;   // 跳跃期间由 jumpTick 管帧
+            if (System.currentTimeMillis() < jumpUntil || standing) return;   // 底部演出期间由 tickMove 管帧
             if (playingEmo) {
                 int[] set = (emoSet == SET_HAPPY) ? happyF : sadF;
                 pet.setImageResource(set[emoIdx]);
