@@ -203,6 +203,22 @@ public class PetService extends Service implements Flyer.Host {
     private float px, py, vx = 2f, vy = 1.5f;
     private int tapCount = 0;
     private long lastTapAt = 0, downAt = 0;
+
+    /** 按住 0.65s 摸头（必须在 ACTION_UP 时取消，否则每次轻点后 0.66s 都会偷偷摸一次头 + 发一次 AI 请求） */
+    private final Runnable handlePetRun = () -> {
+        if (!dragged && System.currentTimeMillis() - downAt >= 650 && !dead) {
+            petted = true;
+            petHead();
+        }
+    };
+    /** 长按 1.5s 打开设置 */
+    private final Runnable handleSettingsRun = () -> {
+        if (!dragged && !petted && System.currentTimeMillis() - downAt >= 1550 && !dead) {
+            petted = true;
+            openSettings();
+            showMinorBubble("打开设置啦～", 1200);
+        }
+    };
     private float downX, downY;
     private boolean dragged, petted;
     public boolean dnd = false;
@@ -285,7 +301,6 @@ public class PetService extends Service implements Flyer.Host {
         emo.load();
         petScale = DataStore.getFloat("petScale", 1f);
         jumpMode = DataStore.getBool("jumpMode", false);
-        if (jumpMode) hopDrift = rnd.nextBoolean() ? HOP_DRIFT_STEP : -HOP_DRIFT_STEP;   // 上次退出时是 jump 模式，恢复左右平移动力
         fly = new Flyer(this);
         startedAt = System.currentTimeMillis();
         lastInteractAt = startedAt;
@@ -531,19 +546,8 @@ public class PetService extends Service implements Flyer.Host {
                     dragged = false;
                     petted = false;
                     pinchStartDist = 0;
-                    handler.postDelayed(() -> {
-                        if (!dragged && System.currentTimeMillis() - downAt >= 650 && !dead) {
-                            petted = true;
-                            petHead();
-                        }
-                    }, 660);
-                    handler.postDelayed(() -> {
-                        if (!dragged && !petted && System.currentTimeMillis() - downAt >= 1550 && !dead) {
-                            petted = true;
-                            openSettings();
-                            showMinorBubble("打开设置啦～", 1200);
-                        }
-                    }, 1560);
+                    handler.postDelayed(handlePetRun, 660);
+                    handler.postDelayed(handleSettingsRun, 1560);
                     return true;
                 case MotionEvent.ACTION_POINTER_DOWN:
                     // 第二根手指按下：进入捏合缩放模式
@@ -568,7 +572,7 @@ public class PetService extends Service implements Flyer.Host {
                             standing = false;
                             approaching = false;
                             dndStand = false;
-                            state = "cruise";
+                            if (!jumpMode) state = "cruise";
                         }
                         // 速度采样（松手惯性用）：记最近一次 MOVE 的位移/时间
                         long nowT = System.currentTimeMillis();
@@ -581,6 +585,7 @@ public class PetService extends Service implements Flyer.Host {
                         lastMoveAt = nowT;
                         px = mx - curSize() / 2f;
                         py = my - curSize() / 2f;
+                        if (jumpMode) py = screenH - curSize() - 60;   // jump 模式只能左右挪，不能脱离底部
                         clampPet();
                         petLP.x = (int) px;
                         petLP.y = (int) py;
@@ -590,6 +595,8 @@ public class PetService extends Service implements Flyer.Host {
                     return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
+                    handler.removeCallbacks(handlePetRun);         // 松手了就别再摸头/开设置
+                    handler.removeCallbacks(handleSettingsRun);
                     if (pinchStartDist > 0) {   // 捏合结束：存尺寸
                         DataStore.putFloat("petScale", petScale);
                         pinchStartDist = 0;
@@ -602,6 +609,29 @@ public class PetService extends Service implements Flyer.Host {
                     boolean fresh = System.currentTimeMillis() - lastMoveAt <= 200;
                     float rvx = fresh ? dragVx * FALL_V_SCALE : 0f;
                     float rvy = fresh ? dragVy * FALL_V_SCALE : 0f;
+                    // jump 模式优先判定：轻点=跳两下；横向拖=用户自己挪位置（不甩出、不滑行、不离开底部）
+                    if (jumpMode) {
+                        long nowJ = System.currentTimeMillis();
+                        lastInteractAt = nowJ;
+                        dragged = false;
+                        petted = false;
+                        if (dist < 60) {                        // 轻点：跳两下
+                            if (nowJ >= jumpUntil) {
+                                jumpBaseY = screenH - curSize() - 60;
+                                py = jumpBaseY;
+                                jumpHopsLeft = 2;
+                                beginHop(nowJ);
+                                awardAff(1);
+                            }
+                        } else {                                // 拖动结束：贴回底部
+                            py = screenH - curSize() - 60;
+                            clampPet();
+                            petLP.x = (int) px;
+                            petLP.y = (int) py;
+                            try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                        }
+                        return true;
+                    }
                     if (petted || dead || dragged) {
                         if (dragged) {
                             // 甩动惯性：快甩→抛物线扔出；普通拖放→按松手速度滑行衰减
@@ -627,16 +657,6 @@ public class PetService extends Service implements Flyer.Host {
                         showBubble(q("throw"), 1500);
                     } else if (dur < 350) {               // 戳
                         long now = System.currentTimeMillis();
-                        if (jumpMode) {                   // jump 模式：戳一下跳一下（不做三连拍扁）
-                            if (now >= jumpUntil) {
-                                jumpBaseY = screenH - curSize() - 60;
-                                jumpHopsLeft = 1;
-                                beginHop(now);
-                                awardAff(1);
-                            }
-                            lastInteractAt = now;
-                            return true;
-                        }
                         tapCount = (now - lastTapAt < 1200) ? tapCount + 1 : 1;
                         lastTapAt = now;
                         if (tapCount >= 3) {              // 三连拍扁
@@ -862,6 +882,7 @@ public class PetService extends Service implements Flyer.Host {
         int pct = Math.max(4, Math.min(40, DataStore.getInt("jumpPct", 14)));
         hopAmp = screenH * pct / 100f;
         if (Math.abs(hopDrift) < 0.01f) hopDrift = rnd.nextBoolean() ? HOP_DRIFT_STEP : -HOP_DRIFT_STEP;
+        if (jumpMode) hopDrift = 0f;         // jump 模式原地跳，横移交给用户拖
         jumpIdx = -1;
         jumpUntil = (long) (now + hopMs);
         state = "hopping";
@@ -901,7 +922,7 @@ public class PetService extends Service implements Flyer.Host {
                 jumpUntil = 0;
                 pet.setScaleX(1f);
                 pet.setScaleY(1f);
-                if (jumpMode) {                  // jump 模式：回到站姿继续左右滑，不飞走
+                if (jumpMode) {                  // jump 模式：回到站姿待命（横移交给用户拖），不飞走
                     pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
                 } else {                         // 随机模式：飞离底部
                     state = "cruise";
@@ -924,10 +945,7 @@ public class PetService extends Service implements Flyer.Host {
             jumpTick(now);
             return;
         }
-        py = bottomLine;
-        px += hopDrift;                        // 左右平移（复用漂移速度）
-        if (px < 0) { px = 0; hopDrift = Math.abs(hopDrift); }
-        else if (px > screenW - curSize()) { px = screenW - curSize(); hopDrift = -Math.abs(hopDrift); }
+        py = bottomLine;                       // 不自动平移：位置由用户拖动决定
         pet.setScaleX(1f);
         pet.setScaleY(1f);
         pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
@@ -957,10 +975,10 @@ public class PetService extends Service implements Flyer.Host {
             if (workMode) { workMode = false; }
             standY = py = screenH - curSize() - 60;
             px = Math.max(0, Math.min(screenW - curSize(), px));
-            hopDrift = rnd.nextBoolean() ? HOP_DRIFT_STEP : -HOP_DRIFT_STEP;
+            hopDrift = 0f;                       // 不自动平移，位置由用户拖
             state = "jump";
             pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
-            showBubble("jump 模式：我会待在底下左右溜达，戳我就跳～", 3500);
+            showBubble("jump 模式：拖我可以挪位置，点我跳两下～", 3500);
         } else {
             state = "cruise";
             hopDrift = 0;
