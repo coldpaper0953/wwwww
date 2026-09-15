@@ -971,7 +971,7 @@ public class PetService extends Service implements Flyer.Host {
                     } else {
                         dndStand = false;
                         standing = false;
-                        jumpHopsLeft = 2 + rnd.nextInt(3);   // 连跳 2~4 下
+                        jumpHopsLeft = 1 + rnd.nextInt(10);  // 连跳 1~10 下（随机）
                         jumpBaseY = standY;
                         jumpIdx = -1;
                         jumpUntil = nowT2 + JUMP_MS;
