@@ -960,12 +960,12 @@ public class PetService extends Service implements Flyer.Host {
         float amp = screenH * Math.max(4, Math.min(40, DataStore.getInt("jumpPct", 14))) / 100f;
         final float fAmp = Math.min(amp, Math.max(40f, fromY - 40f));    // 顶点不出屏
         final long t0 = System.currentTimeMillis();
-        clickHopUntil = t0 + HOP_MS + 60L;
+        clickHopUntil = t0 + (long) HOP_MS + 60L;
         final int[] lastIdx = {-1};
         clickHopRun = new Runnable() {
             @Override
             public void run() {
-                long el = System.currentTimeMillis() - t0[0];
+                long el = System.currentTimeMillis() - t0;
                 if (el >= HOP_MS) {                                      // 落回原位，收工
                     py = fromY;
                     petLP.x = (int) px;
