@@ -201,6 +201,9 @@ public class PetService extends Service implements Flyer.Host {
     private static final float DESCEND_SPEED = 2.4f;
     /** 点击跳：向上平移「跳跃高度」再落回的总时长 */
     private static final float HOP_MS = 600f;
+    /** 点击跳的独立动画：接管期间 tickMove 完全让位（结束前不为空） */
+    private long clickHopUntil = 0;
+    private Runnable clickHopRun;
     /** 每帧横向漂移量（像素），约 36px/秒 */
     private static final float HOP_DRIFT_STEP = 1.1f;
     /** 离底部多远算"靠近"（占屏高比例）—— 2% 就是几乎贴着底边才开始 */
@@ -631,10 +634,7 @@ public class PetService extends Service implements Flyer.Host {
                         dragged = false;
                         petted = false;
                         if (dist < 60) {                        // 轻点：向上平移「跳跃高度」再落回 + 同时触发 AI 请求
-                            jumpBaseY = baseLine();
-                            py = jumpBaseY;
-                            jumpHopsLeft = 1;
-                            beginHop(nowJ);
+                            playClickHop();
                             showBubble("跳！", 800);
                             awardAff(1);
                             aiChat("用户在 jump 模式点了你一下，你原地跳了一下");
@@ -949,6 +949,48 @@ public class PetService extends Service implements Flyer.Host {
         pet.setImageResource(jumpF[0] != 0 ? jumpF[0] : cruiseF[0]);
     }
 
+    /**
+     * 点击跳跃：独立的"升-落"动画（自带 30ms 循环）。
+     * 不经 tickMove 状态机 —— 打盹/勿扰/工作/站立/惯性滑行谁都抢不走它的位置写入，
+     * 只要点击收到了，这个跳就一定播出来。
+     */
+    private void playClickHop() {
+        if (clickHopRun != null) handler.removeCallbacks(clickHopRun);   // 连点时重开一跳
+        final float fromY = py;
+        float amp = screenH * Math.max(4, Math.min(40, DataStore.getInt("jumpPct", 14))) / 100f;
+        final float fAmp = Math.min(amp, Math.max(40f, fromY - 40f));    // 顶点不出屏
+        final long t0 = System.currentTimeMillis();
+        clickHopUntil = t0 + HOP_MS + 60L;
+        final int[] lastIdx = {-1};
+        clickHopRun = new Runnable() {
+            @Override
+            public void run() {
+                long el = System.currentTimeMillis() - t0[0];
+                if (el >= HOP_MS) {                                      // 落回原位，收工
+                    py = fromY;
+                    petLP.x = (int) px;
+                    petLP.y = (int) py;
+                    try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                    return;
+                }
+                float t = el / (float) HOP_MS;
+                float up = (t < 0.5f) ? (t / 0.5f) : (1f - t) / 0.5f;    // 前半升后半降
+                py = fromY - up * fAmp;
+                int i = Math.min(4, (int) (t * 5f));
+                if (i != lastIdx[0]) {
+                    lastIdx[0] = i;
+                    pet.setImageResource(jumpF[i] != 0 ? jumpF[i] : cruiseF[0]);
+                }
+                petLP.x = (int) px;
+                petLP.y = (int) py;
+                try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
+                if (bubble.getVisibility() == View.VISIBLE) placeBubble();
+                handler.postDelayed(this, 30);
+            }
+        };
+        handler.postDelayed(clickHopRun, 30);
+    }
+
     /** 起跳（点击/底部演出共用）：向上平移「跳跃高度」再原路落回，全程 0.6 秒 */
     private void beginHop(long now) {
         hopMs = HOP_MS;
@@ -1108,6 +1150,7 @@ public class PetService extends Service implements Flyer.Host {
         public void run() {
             handler.postDelayed(this, 30);
             if (dead) return;
+            if (System.currentTimeMillis() < clickHopUntil) return;   // 点击跳独立动画接管中，状态机完全让位
             stepStandLift();          // 站立线平滑逼近（拖滑块时不瞬移）
             feedTick();
             if (state.equals("falling")) {

@@ -10,8 +10,8 @@ android {
         applicationId "com.weng.weng"
         minSdk 24
         targetSdk 34
-        versionCode 40
-        versionName "2.10.6"
+        versionCode 41
+        versionName "2.10.7"
     }
 
     signingConfigs {
