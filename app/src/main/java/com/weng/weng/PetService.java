@@ -651,31 +651,38 @@ public class PetService extends Service implements Flyer.Host {
         return r;
     }
 
+    /** 献血时宠物耍脾气拒绝的概率（这是它的脾气，跟血池够不够无关） */
+    private static final int FEED_REFUSE_PCT = 20;
+
     /**
      * 献血入口（设置页调用）。
-     * 结算即时完成，不再等演出走完 —— 无冷却、不挑食、不拒绝，用户想喂几次喂几次。
-     * 饱食度按「吃掉多少血 = 加多少饱食度」1:1 结算（暴击 ×2），所以吸完不会再立刻喊饿。
+     * 用户可以一直点，没有冷却、也不再看血池够不够 —— 血池空了照样能喂（等于直接从用户身上吸）。
+     * 但宠物有约 20% 概率自己拒绝（挑食/撒娇/不饿），拒绝时不消耗血池、不涨饱食度。
+     * 吸到血则结算即时完成，饱食度按「吸多少涨多少」1:1（暴击 ×2）。
      */
     public void startFeed() {
         if (dead) return;
         DataStore.tickOverTime();               // 先把这段时间的自然消耗结掉，再算这一口
-        float pool = DataStore.getBlood();
-        if (pool <= 0.5f) {
-            showBubble("血量还没攒够，等会儿再来～", 3000);
+
+        // ---- 它愿不愿意吃（唯一会"拒绝"的地方，不是资源限制）----
+        if (rnd.nextInt(100) < FEED_REFUSE_PCT) {
+            showBubble(pick("今天不想吸你的，想去外面觅食～", "哼，刚吃过，不饿！",
+                    "别戳啦…让我缓一缓", "姿势不对，改天再来！"), 3500);
+            aiChat("用户要给你献血，你这次拒绝了");
+            fly.switchTo("peek", 90);
             return;
         }
 
         // ---- 叮咬结算（即时）----
-        // 随机食量：这一口吃掉血池的 40%~100%，保底 12，最多不超过血池
-        float blood = pool * (0.4f + rnd.nextFloat() * 0.6f);
-        if (blood < 12f) blood = Math.min(pool, 12f);
-        if (blood > pool) blood = pool;
+        // 随机食量：这一口 15~40 血
         boolean crit = rnd.nextInt(100) < 18;
-
-        DataStore.setBlood(pool - blood);
-        DataStore.addBloodTotal(blood);
+        float bite = 15f + rnd.nextFloat() * 25f;
+        float pool = DataStore.getBlood();
+        float taken = Math.min(pool, bite);      // 血池有就先走血池，空了也照吸，绝不因此拒绝
+        DataStore.setBlood(pool - taken);
+        DataStore.addBloodTotal(bite);           // 累计献血按实际吸到的算
         float before = DataStore.getSatiety();
-        float gain = blood * (crit ? 2f : 1f);
+        float gain = bite * (crit ? 2f : 1f);
         DataStore.setSatiety(before + gain);
         lastFeedAt = System.currentTimeMillis();
 
@@ -693,8 +700,9 @@ public class PetService extends Service implements Flyer.Host {
             pet.setScaleY(1.3f);
             handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 1800);
         }
-        String msg = "吸了 " + (int) blood + " 血，饱食度 +" + (int) gain
-                + (crit ? "（暴击！）" : "");
+        String msg = "吸了 " + (int) bite + " 血，饱食度 +" + (int) gain
+                + "（现在 " + (int) DataStore.getSatiety() + "/100"
+                + (crit ? "，暴击！）" : "）");
         showBubble(crit ? "✨这血也太新鲜了！！" + msg : msg, 4000);
         aiChat(crit
                 ? "用户献血给你，这次血超新鲜，你暴击吸了双倍"
@@ -704,7 +712,7 @@ public class PetService extends Service implements Flyer.Host {
         float total = DataStore.getBloodTotal();
         float[] lines = {250, 600, 1500, 3000};
         for (float l : lines) {
-            if (total >= l && total - blood < l) {
+            if (total >= l && total - bite < l) {
                 showBubble("🎖️ 献血称号晋升：" + DataStore.bloodTitle(), 5000);
             }
         }
@@ -1738,11 +1746,17 @@ public class PetService extends Service implements Flyer.Host {
         return DataStore.titleFor(DataStore.getAff());
     }
 
+    /** 完整饲养状态（给 AI 上下文用） */
     public String feedStatusText() {
         DataStore.tickOverTime();
         float sat = DataStore.getSatiety();
-        return "饱食度 " + (int) sat + "/100（" + DataStore.hungerText(sat) + "）· 血池 "
-                + (int) DataStore.getBlood() + "/100 · 累计献血 "
+        return "饱食度 " + (int) sat + "/100（" + DataStore.hungerText(sat) + "）· " + poolStatusText();
+    }
+
+    /** 血池/累计献血（设置页状态行用；饱食度由进度条单独展示） */
+    public String poolStatusText() {
+        DataStore.tickOverTime();
+        return "血池 " + (int) DataStore.getBlood() + "/100 · 累计献血 "
                 + (int) DataStore.getBloodTotal() + "（" + DataStore.bloodTitle() + "）";
     }
 

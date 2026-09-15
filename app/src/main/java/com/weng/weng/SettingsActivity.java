@@ -30,6 +30,9 @@ public class SettingsActivity extends Activity {
     private TextView tabBtn, senseBtn;
     private android.widget.SeekBar sizeSlider;
     private TextView sizeVal;
+    private LinearLayout satBar;
+    private View satFill, satRest;
+    private TextView satLabel;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -192,10 +195,11 @@ public class SettingsActivity extends Activity {
                 + " · 今日好感 " + com.weng.weng.DataStore.sp().getInt("dailyAff", 0) + "/50"));
         statusLine.setPadding(dp(4), 0, 0, dp(4));
         petCard.addView(statusLine);
-        TextView emoLine = small("#777777", Gravity.LEFT);
+        emoLine = small("#777777", Gravity.LEFT);
         emoLine.setPadding(dp(4), dp(2), 0, dp(4));
         petCard.addView(emoLine);
-        TextView feedLine = small("#777777", Gravity.LEFT);
+        buildSatietyBar(petCard);          // 饱食度可视化进度条
+        feedLine = small("#777777", Gravity.LEFT);
         feedLine.setPadding(dp(4), dp(2), 0, dp(4));
         petCard.addView(feedLine);
 
@@ -639,7 +643,8 @@ public class SettingsActivity extends Activity {
         }
         affLabel.setText(Ico.s(this, "❤ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天"));
         if (emoLine != null) emoLine.setText(Ico.s(this, "🧠 " + PetService.instance.emo.describe()));
-        if (feedLine != null) feedLine.setText(Ico.s(this, "🩸 " + PetService.instance.feedStatusText()));
+        if (feedLine != null) feedLine.setText(Ico.s(this, "🩸 " + PetService.instance.poolStatusText()));
+        refreshSatietyBar();
         if (prankScore != null) prankScore.setText(Ico.s(this, "📊 " + PetService.instance.prankScoreText()));
         if (prankBtn != null) prankBtn.setText(Ico.s(this, PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏"));
         // 惯性档位高亮：选中档加粗+标 ●
@@ -662,8 +667,55 @@ public class SettingsActivity extends Activity {
         if (affVal != null) affVal.setText(String.valueOf(PetService.instance.affection));
     }
 
-    private TextView small(String color, int gravity) {
-        TextView t = new TextView(this);
+    // ================= 饱食度可视化进度条 =================
+
+    /** 搭一根饱食度条：外框=空槽，内部两个 View 按 饱食度 : (100-饱食度) 的权重分宽度 */
+    private void buildSatietyBar(LinearLayout parent) {
+        satLabel = small("#777777", Gravity.LEFT);
+        satLabel.setPadding(dp(4), dp(2), 0, dp(2));
+        parent.addView(satLabel);
+
+        satBar = new LinearLayout(this);
+        satBar.setOrientation(LinearLayout.HORIZONTAL);
+        GradientDrawable track = new GradientDrawable();
+        track.setColor(Color.parseColor("#EDEBE3"));
+        track.setCornerRadius(dp(8));
+        track.setStroke(dp(2), Color.parseColor("#111111"));
+        satBar.setBackground(track);
+        int pad = dp(2);
+        satBar.setPadding(pad, pad, pad, pad);
+
+        satFill = new View(this);
+        satRest = new View(this);
+        satBar.addView(satFill, new LinearLayout.LayoutParams(0, dp(12), 1f));
+        satBar.addView(satRest, new LinearLayout.LayoutParams(0, dp(12), 1f));
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(2);
+        lp.bottomMargin = dp(6);
+        parent.addView(satBar, lp);
+    }
+
+    /** 刷新饱食度条：设置页开着时每秒刷一次，能看着它慢慢往下掉 */
+    private void refreshSatietyBar() {
+        if (satLabel == null || satFill == null || satRest == null) return;
+        float sat = DataStore.getSatiety();
+        int pct = Math.max(0, Math.min(100, (int) Math.round(sat)));
+        satLabel.setText(Ico.s(this, "🩸 饱食度 " + pct + "/100 · " + DataStore.hungerText(sat)));
+
+        int col = sat < 15f ? 0xFFE24B4A : (sat < 35f ? 0xFFEF9F27 : 0xFF639922);
+        GradientDrawable fillBg = new GradientDrawable();
+        fillBg.setColor(col);
+        fillBg.setCornerRadius(dp(6));
+        satFill.setBackground(fillBg);
+
+        float rest = 100f - sat;
+        satFill.setLayoutParams(new LinearLayout.LayoutParams(0, dp(12), Math.max(0.01f, sat)));
+        satRest.setLayoutParams(new LinearLayout.LayoutParams(0, dp(12), Math.max(0.01f, rest)));
+    }
+
+    private TextView small(String color, int gravity) {        TextView t = new TextView(this);
         t.setTextSize(12);
         t.setTextColor(Color.parseColor(color));
         t.setGravity(gravity);
