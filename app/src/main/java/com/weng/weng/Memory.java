@@ -23,6 +23,20 @@ public class Memory {
     /** 是否有一轮整理正在跑（防止手动/自动整理并发） */
     private static volatile boolean digesting = false;
 
+    /**
+     * 已废弃玩法的关键词：命中就丢弃这条记忆。
+     * 起因：「血池」在 v2.5.1 已从代码里删掉，但早期版本把「血池 X/100」写进了 AI 提示词，
+     * AI 当时在回复里念叨过血池，那些回复又被存进原始记忆、整理成了长期记忆 ——
+     * 于是长期记忆里残留着血池，每次注入提示词，AI 就还在念旧。这里把这些条目清掉。
+     */
+    private static final String[] OBSOLETE_WORDS = {"血池"};
+
+    private static boolean hasObsolete(String s) {
+        if (s == null) return false;
+        for (String k : OBSOLETE_WORDS) if (s.contains(k)) return true;
+        return false;
+    }
+
     // ================= 原始记忆（rawLog: [{t, ev, reply}]） =================
 
     public static synchronized List<JSONObject> raw() {
@@ -86,7 +100,8 @@ public class Memory {
             if (t.isEmpty()) continue;
             // 去常见编号前缀
             t = t.replaceFirst("^\\d+[\\.、)]\\s*", "").replaceFirst("^[-•*]\\s*", "");
-            if (t.length() > 2 && PetService.hasCJK(t) && !PetService.containsLeakMarker(t)) longs.add(t);
+            if (t.length() > 2 && PetService.hasCJK(t) && !PetService.containsLeakMarker(t)
+                    && !hasObsolete(t)) longs.add(t);
         }
         while (longs.size() > keep()) longs.remove(0);
         org.json.JSONArray a = new org.json.JSONArray();
@@ -118,7 +133,7 @@ public class Memory {
         DataStore.sp().edit().putString("userPersona", s == null ? "" : s.trim()).apply();
     }
 
-    /** 清洗历史存档里已入库的思维链脏数据（含提示词标记/标签/无汉字的条目），启动时静默执行 */
+    /** 清洗历史存档：思维链脏数据（含提示词标记/标签/无汉字的条目）+ 已废弃玩法的残留（血池），启动时静默执行 */
     public static synchronized void purgeDirty() {
         try {
             List<JSONObject> r = raw();
@@ -129,7 +144,8 @@ public class Memory {
                 String ev = o.optString("ev", "");
                 // 泄漏标记，或 60 字以上仍无汉字（英文推理长文）→ 脏
                 if (PetService.containsLeakMarker(reply) || PetService.containsLeakMarker(ev)
-                        || (reply.length() > 60 && !PetService.hasCJK(reply))) {
+                        || (reply.length() > 60 && !PetService.hasCJK(reply))
+                        || hasObsolete(reply) || hasObsolete(ev)) {
                     r.remove(i);
                     rawChanged = true;
                 }
@@ -139,8 +155,8 @@ public class Memory {
             boolean longChanged = false;
             List<String> keepList = new ArrayList<String>();
             for (String s : l) {
-                // 记忆条目约定为中文格式，无汉字即脏
-                if (PetService.containsLeakMarker(s) || !PetService.hasCJK(s)) longChanged = true;
+                // 记忆条目约定为中文格式，无汉字即脏；提已废弃玩法的也一并清掉
+                if (PetService.containsLeakMarker(s) || !PetService.hasCJK(s) || hasObsolete(s)) longChanged = true;
                 else keepList.add(s);
             }
             if (longChanged) {
