@@ -51,7 +51,7 @@ public class TheaterActivity extends Activity {
         btnA.setOnClickListener(v -> {
             if (PetService.instance != null) {
                 String r = Extras.theaterResult(0, scene, a);
-                PetService.instance.showBubble(r, 6000);
+                PetService.instance.showBubbleMajor(r, 6000);
                 PetService.instance.aiChat("小剧场：场景「" + scene + "」，用户选了「" + a + "」，结果" + r);
             }
             finish();
@@ -62,7 +62,7 @@ public class TheaterActivity extends Activity {
         btnB.setOnClickListener(v -> {
             if (PetService.instance != null) {
                 String r = Extras.theaterResult(1, scene, b2);
-                PetService.instance.showBubble(r, 6000);
+                PetService.instance.showBubbleMajor(r, 6000);
                 PetService.instance.aiChat("小剧场：场景「" + scene + "」，用户选了「" + b2 + "」，结果" + r);
             }
             finish();

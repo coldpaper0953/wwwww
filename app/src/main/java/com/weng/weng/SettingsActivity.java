@@ -33,6 +33,9 @@ public class SettingsActivity extends Activity {
     private LinearLayout satBar;
     private View satFill, satRest;
     private TextView satLabel;
+    private android.widget.SeekBar chatGapSlider, chatJitSlider, chatCapSlider;
+    private TextView chatGapVal, chatJitVal, chatCapVal, chatCountVal;
+    private boolean chatDragging = false;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -421,6 +424,64 @@ public class SettingsActivity extends Activity {
         root.addView(ixCard);
         root.addView(gap(10));
 
+        // ============ 主动搭话节奏卡片 ============
+        root.addView(cardLabel("⏰ 主动搭话节奏"));
+        LinearLayout chatCard = card();
+
+        chatCard.addView(rowLabel("基准间隔（每隔 n 分钟主动来搭理你一次）"));
+        LinearLayout gapRow = new LinearLayout(this);
+        gapRow.setOrientation(LinearLayout.HORIZONTAL);
+        chatGapSlider = new android.widget.SeekBar(this);
+        chatGapSlider.setMax(115);                       // 5 ~ 120 分钟
+        chatGapSlider.setProgress(clampInt(Math.round(DataStore.getFloat("chatGapMin", 10f)) - 5, 0, 115));
+        gapRow.addView(chatGapSlider,
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        chatGapVal = valueLabel();
+        gapRow.addView(chatGapVal);
+        chatGapSlider.setOnSeekBarChangeListener(seeker(() -> {
+            DataStore.putFloat("chatGapMin", chatGapSlider.getProgress() + 5f);
+            chatGapVal.setText((chatGapSlider.getProgress() + 5) + " 分");
+        }));
+        chatCard.addView(gapRow);
+
+        chatCard.addView(rowLabel("动态抖动（在这个间隔上下浮动，避免每次都一样准点）"));
+        LinearLayout jitRow = new LinearLayout(this);
+        jitRow.setOrientation(LinearLayout.HORIZONTAL);
+        chatJitSlider = new android.widget.SeekBar(this);
+        chatJitSlider.setMax(100);
+        chatJitSlider.setProgress(clampInt(DataStore.getInt("chatJitter", 50), 0, 100));
+        jitRow.addView(chatJitSlider,
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        chatJitVal = valueLabel();
+        jitRow.addView(chatJitVal);
+        chatJitSlider.setOnSeekBarChangeListener(seeker(() -> {
+            DataStore.putInt("chatJitter", chatJitSlider.getProgress());
+            chatJitVal.setText("±" + chatJitSlider.getProgress() + "%");
+        }));
+        chatCard.addView(jitRow);
+
+        chatCard.addView(rowLabel("每天最多主动说几条（0 ＝ 不限）"));
+        LinearLayout capRow = new LinearLayout(this);
+        capRow.setOrientation(LinearLayout.HORIZONTAL);
+        chatCapSlider = new android.widget.SeekBar(this);
+        chatCapSlider.setMax(60);
+        chatCapSlider.setProgress(clampInt(DataStore.getInt("chatDailyCap", 0), 0, 60));
+        capRow.addView(chatCapSlider,
+                new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        chatCapVal = valueLabel();
+        capRow.addView(chatCapVal);
+        chatCapSlider.setOnSeekBarChangeListener(seeker(() -> {
+            DataStore.putInt("chatDailyCap", chatCapSlider.getProgress());
+            chatCapVal.setText(chatCapSlider.getProgress() == 0 ? "不限" : chatCapSlider.getProgress() + " 条");
+        }));
+        chatCard.addView(capRow);
+
+        chatCountVal = small("#777777", Gravity.LEFT);
+        chatCountVal.setPadding(dp(4), dp(2), 0, dp(2));
+        chatCard.addView(chatCountVal);
+        root.addView(chatCard);
+        root.addView(gap(10));
+
         // ============ 更新与关于卡片 ============
         root.addView(cardLabel("⚙️ 更新与关于"));
         LinearLayout aboutCard = card();
@@ -637,13 +698,14 @@ public class SettingsActivity extends Activity {
     }
 
     private void refresh() {
+        refreshChatSettings();
         if (PetService.instance == null) {
             affLabel.setText("宠物未运行");
             return;
         }
         affLabel.setText(Ico.s(this, "❤ 好感度 " + PetService.instance.affection + "　·　第 " + PetService.instance.daysCount() + " 天"));
         if (emoLine != null) emoLine.setText(Ico.s(this, "🧠 " + PetService.instance.emo.describe()));
-        if (feedLine != null) feedLine.setText(Ico.s(this, "🩸 " + PetService.instance.poolStatusText()));
+        if (feedLine != null) feedLine.setText(Ico.s(this, "🩸 " + PetService.instance.donationStatusText()));
         refreshSatietyBar();
         if (prankScore != null) prankScore.setText(Ico.s(this, "📊 " + PetService.instance.prankScoreText()));
         if (prankBtn != null) prankBtn.setText(Ico.s(this, PetService.instance.prankMode ? "🕊 结束整蛊" : "🦟 注入并隐藏"));
@@ -665,6 +727,54 @@ public class SettingsActivity extends Activity {
         workBtn.setText(Ico.s(this, PetService.instance.workMode ? "📚 工作中" : "📚 工作"));
         speedLabel.setText("×" + String.format(java.util.Locale.US, "%.1f", PetService.instance.getSpeedMul()));
         if (affVal != null) affVal.setText(String.valueOf(PetService.instance.affection));
+    }
+
+    // ================= 主动搭话节奏 =================
+
+    /** 同步三根滑块 + 今日已主动搭话条数 */
+    private void refreshChatSettings() {
+        if (chatGapSlider == null) return;
+        int gap = clampInt(Math.round(DataStore.getFloat("chatGapMin", 10f)), 5, 120);
+        int jit = clampInt(DataStore.getInt("chatJitter", 50), 0, 100);
+        int cap = clampInt(DataStore.getInt("chatDailyCap", 0), 0, 60);
+        if (!chatDragging) {
+            chatGapSlider.setProgress(gap - 5);
+            chatJitSlider.setProgress(jit);
+            chatCapSlider.setProgress(cap);
+        }
+        chatGapVal.setText(gap + " 分");
+        chatJitVal.setText("±" + jit + "%");
+        chatCapVal.setText(cap == 0 ? "不限" : cap + " 条");
+        // 抖动后的实际区间，方便预览
+        int lo = Math.max(1, Math.round(gap * (1f - jit / 100f)));
+        int hi = Math.max(lo, Math.round(gap * (1f + jit / 100f)));
+        int sent = DataStore.sp().getInt("chatCount", 0);
+        chatCountVal.setText("实际触发 " + lo + " ~ " + hi + " 分钟一次　·　今天已主动搭话 "
+                + sent + (cap == 0 ? " 条（不限量）" : "/" + cap + " 条"));
+    }
+
+    private static int clampInt(int v, int lo, int hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    /** 滑块右侧的数值标签 */
+    private TextView valueLabel() {
+        TextView t = new TextView(this);
+        t.setTextSize(13);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextColor(Color.parseColor("#111111"));
+        t.setGravity(Gravity.CENTER);
+        t.setMinWidth(dp(64));
+        return t;
+    }
+
+    /** 滑块监听：只在用户拖动时回调（refresh 回写进度不会反复触发） */
+    private android.widget.SeekBar.OnSeekBarChangeListener seeker(final Runnable onChange) {
+        return new android.widget.SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(android.widget.SeekBar sb, int p, boolean fromUser) {
+                if (fromUser) onChange.run();
+            }
+            @Override public void onStartTrackingTouch(android.widget.SeekBar sb) { chatDragging = true; }
+            @Override public void onStopTrackingTouch(android.widget.SeekBar sb) { chatDragging = false; }
+        };
     }
 
     // ================= 饱食度可视化进度条 =================
@@ -702,7 +812,7 @@ public class SettingsActivity extends Activity {
         if (satLabel == null || satFill == null || satRest == null) return;
         float sat = DataStore.getSatiety();
         int pct = Math.max(0, Math.min(100, (int) Math.round(sat)));
-        satLabel.setText(Ico.s(this, "🩸 饱食度 " + pct + "/100 · " + DataStore.hungerText(sat)));
+        satLabel.setText(Ico.s(this, "🍅 饱食度 " + pct + "/100 · " + DataStore.hungerText(sat)));
 
         int col = sat < 15f ? 0xFFE24B4A : (sat < 35f ? 0xFFEF9F27 : 0xFF639922);
         GradientDrawable fillBg = new GradientDrawable();

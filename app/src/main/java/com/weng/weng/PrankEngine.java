@@ -173,7 +173,7 @@ public class PrankEngine {
         // BOSS 解锁：杀满 40 或撑 10 分钟
         if (!bossDefeated && boss == null && (kills >= 40 || System.currentTimeMillis() - startAt > 600000L)) {
             if (kills >= 38 && kills < 40) {
-                h.pet().showBubble("⚠️ BOSS 即将出现！做好准备！", 3000);
+                h.pet().showBubbleMajor("⚠️ BOSS 即将出现！做好准备！", 3000);
             }
             spawnBoss();
         }
@@ -237,7 +237,7 @@ public class PrankEngine {
         String e = es.get(h.rnd().nextInt(es.size()));
         String[] parts = e.split("\\|");
         // 借主宠的气泡+增援一只
-        h.pet().showBubble("⚠ " + parts[0] + "\n" + (parts.length > 1 ? parts[1] : ""), 4000);
+        h.pet().showBubbleMajor("⚠ " + parts[0] + "\n" + (parts.length > 1 ? parts[1] : ""), 4000);
         spawn(true);
     }
     
@@ -338,7 +338,7 @@ public class PrankEngine {
     // ================= 终局 =================
 
     private void endGame() {
-        h.pet().showBubble("⚠ CRITICAL_SYSTEM_FAILURE\n蚊子系统崩溃中…", 4000);
+        h.pet().showBubbleMajor("⚠ CRITICAL_SYSTEM_FAILURE\n蚊子系统崩溃中…", 4000);
         h.handler().postDelayed(this::showBsod, 4000);
     }
 
@@ -407,7 +407,7 @@ public class PrankEngine {
                 stop();
                 String report = "🪧 整蛊战报\n击杀 " + kills + " 只 · 存活 " +
                         (System.currentTimeMillis() - startAt) / 1000 + " 秒 · 最高第 " + wave + " 波\n蚊子大军已被你终结！";
-                h.pet().showBubble(report, 9000);
+                h.pet().showBubbleMajor(report, 9000);
                 return true;
             }
             return false;

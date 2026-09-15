@@ -30,7 +30,7 @@ public class Planner {
         DataStore.saveArr("todos", l);
     }
 
-    /** 完成待办：返回 [成功?, 文案]；好感+5 血池+8 由 PetService 结算 */
+    /** 完成待办：返回 [成功?, 文案]；好感 +5 由 Activity 结算 */
     public static String completeTodo(int idx) {
         List<JSONObject> l = todos();
         if (idx < 0 || idx >= l.size()) return null;
@@ -326,7 +326,7 @@ public class Planner {
         return (pausedNow ? "⏸ 已暂停 " : "") + String.format(Locale.US, "%02d:%02d", left / 60, left % 60);
     }
 
-    /** 专注完成结算：今日/累计统计+好感10+血池15（返回结算文案） */
+    /** 专注完成结算：今日/累计统计 + 好感 10（返回结算文案） */
     public static String finishFocus() {
         JSONObject o = focus();
         int mins = o.optInt("targetMin", 25);

@@ -242,8 +242,7 @@ public class PlannerActivity extends Activity {
                     String txt = Planner.completeTodo(idx);
                     if (txt != null && PetService.instance != null) {
                         PetService.instance.awardAff(5);
-                        DataStore.setBlood(Math.min(100, DataStore.getBlood() + 8));
-                        PetService.instance.showBubble("完成了「" + txt + "」！+5 好感 +8 血池 🎉", 4000);
+                        PetService.instance.showBubble("完成了「" + txt + "」！+5 好感 🎉", 4000);
                         PetService.instance.aiChat("用户完成了待办「" + txt + "」，夸夸他");
                     }
                     rebuild();

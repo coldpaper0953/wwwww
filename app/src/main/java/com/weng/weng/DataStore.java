@@ -81,15 +81,11 @@ public class DataStore {
         return t;
     }
 
-    // ================= 饲养：饱食度 / 血池 / 献血称号 =================
+    // ================= 饲养：饱食度 / 累计献血 =================
 
     public static float getSatiety() { return P.getFloat("satiety", 70f); }
 
     public static void setSatiety(float v) { P.edit().putFloat("satiety", Math.max(0f, Math.min(100f, v))).apply(); }
-
-    public static float getBlood() { return P.getFloat("blood", 30f); }
-
-    public static void setBlood(float v) { P.edit().putFloat("blood", Math.max(0f, Math.min(100f, v))).apply(); }
 
     public static float getBloodTotal() { return P.getFloat("bloodTotal", 0f); }
 
@@ -116,18 +112,15 @@ public class DataStore {
 
     public static long getStuffedUntil() { return P.getLong("stuffedUntil", 0L); }
 
-    // ---- 饱食度 / 血池：按"真实流逝时长"结算 ----
+    // ---- 饱食度：按"真实流逝时长"结算 ----
     // 饱食度：白天 12.6/小时，夜间 ×1.6（约 20/小时）
-    // 血池：  白天 7.9/小时，夜间 ×0.8（约 6.3/小时）
     private static final float SAT_PER_SEC_DAY = 0.0035f;
-    private static final float BLOOD_PER_SEC_DAY = 0.0022f;
     private static final float SAT_NIGHT_MUL = 1.6f;
-    private static final float BLOOD_NIGHT_MUL = 0.8f;
     /** 单次最多结算 3 天，避免长时间没开 App 后一开机直接见底 */
     private static final float MAX_ELAPSED_SEC = 72 * 3600f;
 
     /**
-     * 按真实流逝的秒数结算饱食度下降与血池回复。
+     * 按真实流逝的秒数结算饱食度下降。
      * 幂等、可随时调用：关机 / 后台挂起期间的时间一样算数（下次调用时一次性补算）。
      */
     public static void tickOverTime() {
@@ -144,7 +137,6 @@ public class DataStore {
         int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
         boolean night = h >= 22 || h < 7;
         setSatiety(getSatiety() - sec * SAT_PER_SEC_DAY * (night ? SAT_NIGHT_MUL : 1f));
-        setBlood(getBlood() + sec * BLOOD_PER_SEC_DAY * (night ? BLOOD_NIGHT_MUL : 1f));
     }
 
     /** 饥饿档位（与电脑版原设计一致）：starving / hungry / normal / full */

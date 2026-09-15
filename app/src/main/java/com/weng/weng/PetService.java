@@ -216,6 +216,14 @@ public class PetService extends Service implements Flyer.Host {
     private float lastMoveX = 0, lastMoveY = 0;
     private long lastMoveAt = 0;
 
+    // 抛物线甩出：初速来自松手速度，之后受重力下落、撞边反弹
+    private float fallVx = 0, fallVy = 0;
+    private int fallBounces = 0;
+    private static final float FALL_GRAVITY = 1.2f;    // 每帧(30ms)增量
+    private static final float FALL_DRAG = 0.99f;      // 空气阻力
+    /** 采样是按 16ms 档换算的，tickMove 是 30ms 一帧 */
+    private static final float FALL_V_SCALE = 30f / 16f;
+
     // 时间感知：时段名+跨时段问候
     private String lastPeriod = null;
 
@@ -247,7 +255,7 @@ public class PetService extends Service implements Flyer.Host {
         Memory.purgeDirty(); // 清洗历史存档里已入库的思维链脏数据
         loadQuotes();
         DataStore.init(this);
-        DataStore.tickOverTime();   // 补算 App 没开着的那段时间（饱食度下降 / 血池回复）
+        DataStore.tickOverTime();   // 补算 App 没开着的那段时间（饱食度下降）
         emo.load();
         petScale = DataStore.getFloat("petScale", 1f);
         fly = new Flyer(this);
@@ -273,6 +281,7 @@ public class PetService extends Service implements Flyer.Host {
         handler.postDelayed(this::reminderTick, 60000);   // 喝水/久坐/DDL/整点报时
         handler.postDelayed(this::weatherTick, 3000);     // 每日天气播报（3s 后首查）
         handler.postDelayed(this::idleChatTick, 90000);   // 主动搭话
+        nextAutoChatAt = System.currentTimeMillis() + autoChatGapMs();
         handler.postDelayed(this::appSenseTick, 25000);   // 前台应用感知/会议勿扰
         handler.postDelayed(this::extrasTick, 180000);     // 随机事件/小游戏/小剧场
         handler.postDelayed(this::achieveTick, 120000);    // 成就检查
@@ -340,18 +349,18 @@ public class PetService extends Service implements Flyer.Host {
                     }
                 }
                 if (tag.isEmpty() || assetUrl == null) {
-                    if (manual) handler.post(() -> showBubble("检查更新失败：接口返回异常（稍后再试）", 4000));
+                    if (manual) handler.post(() -> showBubbleMajor("检查更新失败：接口返回异常（稍后再试）", 4000));
                     return;
                 }
                 if (verCmp(tag, curVersion()) <= 0) {
-                    if (manual) handler.post(() -> showBubble("已是最新版本 " + curVersion() + "～", 4000));
+                    if (manual) handler.post(() -> showBubbleMajor("已是最新版本 " + curVersion() + "～", 4000));
                     return;
                 }
-                handler.post(() -> showBubble("发现新版本 " + tag + "！正在下载…", 8000));
+                handler.post(() -> showBubbleMajor("发现新版本 " + tag + "！正在下载…", 8000));
                 downloadAndInstall(assetUrl);
             } catch (Exception e) {
                 // GitHub 在国内网络常不可直连；手动触发时告知用户而不是静默吞掉
-                if (manual) handler.post(() -> showBubble("检查更新失败：连不上 GitHub（需要能访问 github.com 的网络）", 6000));
+                if (manual) handler.post(() -> showBubbleMajor("检查更新失败：连不上 GitHub（需要能访问 github.com 的网络）", 6000));
             }
         }).start();
     }
@@ -380,11 +389,11 @@ public class PetService extends Service implements Flyer.Host {
                 is.close();
                 final long ftotal = total;
                 handler.post(() -> {
-                    showBubble("新版本下载完成（" + (ftotal / 1024) + "KB），拉起安装～", 5000);
+                    showBubbleMajor("新版本下载完成（" + (ftotal / 1024) + "KB），拉起安装～", 5000);
                     installUpdate();
                 });
             } catch (Exception e) {
-                handler.post(() -> showBubble("更新下载失败，稍后再试", 3000));
+                handler.post(() -> showBubbleMajor("更新下载失败，稍后再试", 3000));
             }
         }).start();
     }
@@ -398,7 +407,7 @@ public class PetService extends Service implements Flyer.Host {
             startActivity(i);
         } catch (Exception e) {
             // 多为未授予"安装未知应用"权限：引导跳到本应用的安装授权设置页
-            showBubble("安装未启动，正在打开授权页——请允许本应用安装更新", 6000);
+            showBubbleMajor("安装未启动，正在打开授权页——请允许本应用安装更新", 6000);
             try {
                 startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                         android.net.Uri.parse("package:" + getPackageName()))
@@ -503,7 +512,7 @@ public class PetService extends Service implements Flyer.Host {
                         if (!dragged && !petted && System.currentTimeMillis() - downAt >= 1550 && !dead) {
                             petted = true;
                             openSettings();
-                            showBubble("打开设置啦～", 1200);
+                            showMinorBubble("打开设置啦～", 1200);
                         }
                     }, 1560);
                     return true;
@@ -553,17 +562,21 @@ public class PetService extends Service implements Flyer.Host {
                     float ux = ev.getRawX(), uy = ev.getRawY();
                     long dur = System.currentTimeMillis() - downAt;
                     float dist = (float) Math.hypot(ux - downX, uy - downY);
+                    // 松手速度：手指/鼠标停下超过 200ms 再松手，就不算"甩"
+                    boolean fresh = System.currentTimeMillis() - lastMoveAt <= 200;
+                    float rvx = fresh ? dragVx * FALL_V_SCALE : 0f;
+                    float rvy = fresh ? dragVy * FALL_V_SCALE : 0f;
                     if (petted || dead || dragged) {
                         if (dragged) {
-                            // 甩动惯性：快甩→扔出坠落；普通拖放→按松手速度滑行衰减
+                            // 甩动惯性：快甩→抛物线扔出；普通拖放→按松手速度滑行衰减
                             float speed = (float) Math.hypot(dragVx, dragVy);
                             if (dist > 60 && speed > 18f) {          // 快甩：扔出
-                                state = "falling";
+                                startFall(rvx, rvy);
                                 emo.add("生气", 8);
                                 showBubble(q("throw"), 1500);
                             } else if (speed > 1.2f) {                // 惯性滑行
                                 fly.glide(dragVx, dragVy);
-                                if (speed > 8f) showBubble(Quotes.pick("glide", rnd), 1500);
+                                if (speed > 8f) showMinorBubble(Quotes.pick("glide", rnd), 1500);
                             } else {
                                 fly.switchTo("cruise", 0);            // 慢放：原地恢复巡航
                             }
@@ -573,7 +586,7 @@ public class PetService extends Service implements Flyer.Host {
                     }
                     lastInteractAt = System.currentTimeMillis();
                     if (dist > 60) {                      // 扔出去
-                        state = "falling";
+                        startFall(rvx, rvy);
                         emo.add("生气", 8);
                         showBubble(q("throw"), 1500);
                     } else if (dur < 350) {               // 戳
@@ -586,7 +599,7 @@ public class PetService extends Service implements Flyer.Host {
                         } else {
                             playEmo(happyF, 1);
                             emo.add("开心", 6);
-                            showBubble(tapCount == 1 ? "嗯？" : "别闹…", 1800);
+                            showMinorBubble(tapCount == 1 ? "嗯？" : "别闹…", 1800);
                             awardAff(1);
                             aiChat(tapCount == 1 ? "用户戳了你一下" : "用户又戳了你一下，这是第 " + tapCount + " 次");
                         }
@@ -643,7 +656,7 @@ public class PetService extends Service implements Flyer.Host {
         affection = DataStore.getAff();
         int ms = DataStore.milestoneCrossed(prev, affection);
         if (ms > 0) {
-            showBubble(Quotes.pick("milestone", rnd, String.valueOf(ms), DataStore.titleFor(affection), null), 5000);
+            showBubbleMajor(Quotes.pick("milestone", rnd, String.valueOf(ms), DataStore.titleFor(affection), null), 5000);
             DataStore.setPendingTheater("aff" + ms);
             aiChat("你和蚊子的好感度刚刚突破 " + ms + "，跨入「" + DataStore.titleFor(affection) + "」阶段，它很感动");
         }
@@ -651,13 +664,13 @@ public class PetService extends Service implements Flyer.Host {
         return r;
     }
 
-    /** 献血时宠物耍脾气拒绝的概率（这是它的脾气，跟血池够不够无关） */
+    /** 献血时宠物耍脾气拒绝的概率（这是它的脾气，没有任何资源限制） */
     private static final int FEED_REFUSE_PCT = 20;
 
     /**
      * 献血入口（设置页调用）。
-     * 用户可以一直点，没有冷却、也不再看血池够不够 —— 血池空了照样能喂（等于直接从用户身上吸）。
-     * 但宠物有约 20% 概率自己拒绝（挑食/撒娇/不饿），拒绝时不消耗血池、不涨饱食度。
+     * 用户可以一直点，没有冷却、也没有任何资源门槛。
+     * 但宠物有约 20% 概率自己拒绝（挑食/撒娇/不饿），拒绝时什么都不发生。
      * 吸到血则结算即时完成，饱食度按「吸多少涨多少」1:1（暴击 ×2）。
      */
     public void startFeed() {
@@ -677,10 +690,7 @@ public class PetService extends Service implements Flyer.Host {
         // 随机食量：这一口 15~40 血
         boolean crit = rnd.nextInt(100) < 18;
         float bite = 15f + rnd.nextFloat() * 25f;
-        float pool = DataStore.getBlood();
-        float taken = Math.min(pool, bite);      // 血池有就先走血池，空了也照吸，绝不因此拒绝
-        DataStore.setBlood(pool - taken);
-        DataStore.addBloodTotal(bite);           // 累计献血按实际吸到的算
+        DataStore.addBloodTotal(bite);           // 累计献血
         float before = DataStore.getSatiety();
         float gain = bite * (crit ? 2f : 1f);
         DataStore.setSatiety(before + gain);
@@ -713,7 +723,7 @@ public class PetService extends Service implements Flyer.Host {
         float[] lines = {250, 600, 1500, 3000};
         for (float l : lines) {
             if (total >= l && total - bite < l) {
-                showBubble("🎖️ 献血称号晋升：" + DataStore.bloodTitle(), 5000);
+                showBubbleMajor("🎖️ 献血称号晋升：" + DataStore.bloodTitle(), 5000);
             }
         }
         // 顶到满饱食度才打个嗝（纯趣味反馈，不会拦住下一次喂食）
@@ -744,6 +754,18 @@ public class PetService extends Service implements Flyer.Host {
         } else if (feedPhase == 3 && t > 400) {   // 演出结束
             feedPhase = 0;
         }
+    }
+
+    /**
+     * 开始抛物线甩出。初速直接来自松手那一刻的甩动速度 —— 甩得越快飞得越远越高。
+     * 没甩出速度时给一个轻轻上抛，保证总有抛物线感。
+     */
+    private void startFall(float vx0, float vy0) {
+        fallVx = vx0;
+        fallVy = vy0;
+        if (Math.abs(fallVx) < 1f && fallVy > -3f) fallVy = -5f;
+        fallBounces = 0;
+        state = "falling";
     }
 
     private void clampPet() {
@@ -780,20 +802,45 @@ public class PetService extends Service implements Flyer.Host {
                 return;
             }
             if (state.equals("falling")) {
-                py += 18;
-                if (py >= screenH - curSize() - 60) {
-                    py = screenH - curSize() - 60;
-                    state = "cruise";
-                    fly.switchTo("dizzy", 60);
-                    handler.postDelayed(() -> aiChat("用户刚才把你狠狠甩了出去，你摔得头晕眼花"), 300);
+                // 抛物线：横向带着松手时的速度、竖直方向受重力加速下落，撞左右墙会衰减反弹
+                int sz = curSize();
+                fallVy += FALL_GRAVITY;
+                px += fallVx;
+                py += fallVy;
+                fallVx *= FALL_DRAG;
+                if (px < 0) {                       // 撞左墙
+                    px = 0;
+                    fallVx = Math.abs(fallVx) * 0.55f;
+                } else if (px > screenW - sz) {     // 撞右墙
+                    px = screenW - sz;
+                    fallVx = -Math.abs(fallVx) * 0.55f;
                 }
+                if (py < 40) {                      // 撞到顶部
+                    py = 40;
+                    fallVy = Math.abs(fallVy) * 0.5f;
+                }
+                float floor = screenH - sz - 60;
+                if (py >= floor) {
+                    py = floor;
+                    if (fallVy > 10f && fallBounces < 2) {   // 还有余劲就再弹一下
+                        fallVy = -fallVy * 0.42f;
+                        fallVx *= 0.7f;
+                        fallBounces++;
+                    } else {                                 // 摔停 → 眩晕
+                        state = "cruise";
+                        fallVx = 0;
+                        fallVy = 0;
+                        fly.switchTo("dizzy", 60);
+                        handler.postDelayed(() -> aiChat("用户刚才把你狠狠甩了出去，你摔得头晕眼花"), 300);
+                    }
+                }
+                petLP.x = (int) px;
                 petLP.y = (int) py;
                 try { wm.updateViewLayout(pet, petLP); } catch (Exception ignored) {}
                 if (bubble.getVisibility() == View.VISIBLE) placeBubble();
                 return;
             }
             // 常规：Flyer 状态机驱动（falling 由上面处理；flyer 的 cruise 内含撞边反弹）
-            if (state.equals("falling")) return;
             fly.step();
             // 状态同步（snapping 等剧情态存 state，运动态存 fly.state）
             if (!state.equals("snapping") && !state.equals("stunned")) state = fly.state;
@@ -873,7 +920,7 @@ public class PetService extends Service implements Flyer.Host {
     }
 
     private void firstGreeting() {
-        showBubble("嗡嗡～我飞到你手机上啦！点我、按住我、甩我都行～", 4000);
+        showBubbleMajor("嗡嗡～我飞到你手机上啦！点我、按住我、甩我都行～", 4000);
     }
 
     // ---------------- 气泡 ----------------
@@ -898,8 +945,38 @@ public class PetService extends Service implements Flyer.Host {
         wm.addView(bubble, bubbleLP);
     }
 
+    // ---- 气泡优先级：低优先级不会打断正在显示的高优先级气泡 ----
+    // 碎碎念（撞墙/滑翔/戳/打嗝/睡醒）是 MINOR，绝不会把 AI 回复、提醒、成就之类顶掉
+    public static final int BUBBLE_MINOR = 0;
+    public static final int BUBBLE_NORMAL = 1;
+    public static final int BUBBLE_MAJOR = 2;
+
+    private int bubblePrio = -1;
+    private long bubbleUntil = 0;
+
     public void showBubble(String text, long ms) {
-        lastBubbleAt = System.currentTimeMillis();
+        showBubble(text, ms, BUBBLE_NORMAL);
+    }
+
+    /** 碎碎念气泡：屏幕上有更重要内容时直接丢掉，不去打断 */
+    private void showMinorBubble(String text, long ms) {
+        showBubble(text, ms, BUBBLE_MINOR);
+    }
+
+    /** 重要气泡：必定显示，且之后不会被碎碎念顶掉 */
+    public void showBubbleMajor(String text, long ms) {
+        showBubble(text, ms, BUBBLE_MAJOR);
+    }
+
+    public void showBubble(String text, long ms, int prio) {
+        long now = System.currentTimeMillis();
+        // 屏上还有更重要的气泡没到时间 → 这次不打断它
+        if (bubble.getVisibility() == View.VISIBLE && now < bubbleUntil && prio < bubblePrio) {
+            return;
+        }
+        lastBubbleAt = now;
+        bubblePrio = prio;
+        bubbleUntil = now + ms;
         bubble.setText(Ico.s(this, text));
         bubble.setVisibility(View.VISIBLE);
         bubbleLP.x = (int) Math.max(8, Math.min(px - 20, screenW - 20 - bubble.getWidth()));
@@ -912,6 +989,8 @@ public class PetService extends Service implements Flyer.Host {
     private final Runnable hideBubbleRun = this::hideBubble;
 
     private void hideBubble() {
+        bubblePrio = -1;
+        bubbleUntil = 0;
         bubble.setVisibility(View.GONE);
     }
 
@@ -952,15 +1031,15 @@ public class PetService extends Service implements Flyer.Host {
 
     // ---------------- 阶段1新增：周期任务 ----------------
 
-    /** 30s：饱食度随时间下降/血池回复/吃撑结束/打嗝/饥饿催血 */
+    /** 30s：饱食度随时间下降/吃撑结束/打嗝/饥饿催血 */
     private void metaTick() {
         handler.postDelayed(this::metaTick, 30000);
-        // 饱食度与血池按"真实流逝时长"结算（关机、后台挂起期间的时间也算）
+        // 饱食度按"真实流逝时长"结算（关机、后台挂起期间的时间也算）
         DataStore.tickOverTime();
         float sat = DataStore.getSatiety();
         // 吃撑打嗝（纯趣味，不影响喂食）
         if (System.currentTimeMillis() < DataStore.getStuffedUntil() && rnd.nextInt(100) < 25) {
-            showBubble(Quotes.pick("stuffed", rnd), 2000);
+            showMinorBubble(Quotes.pick("stuffed", rnd), 2000);
             if (fly.state.equals("cruise")) fly.switchTo("drift", 150);
         }
         // 饥饿催血：刚喂过 90s 内不喊饿，避免"刚吸完又喊饿"的自相矛盾
@@ -972,7 +1051,7 @@ public class PetService extends Service implements Flyer.Host {
         // 起床气/小睡结束
         if (napping && System.currentTimeMillis() > napUntil) {
             napping = false;
-            showBubble("（揉眼睛）唔……睡饱了", 2500);
+            showMinorBubble("（揉眼睛）唔……睡饱了", 2500);
         }
         emo.save();
     }
@@ -993,7 +1072,7 @@ public class PetService extends Service implements Flyer.Host {
             napping = true;
             napUntil = System.currentTimeMillis() + (60000L * (1 + rnd.nextInt(5)));
             fly.switchTo("corner_rest", 100000);
-            showBubble(q("sleep"), 4000);
+            showMinorBubble(q("sleep"), 4000);
         }
     }
 
@@ -1003,7 +1082,7 @@ public class PetService extends Service implements Flyer.Host {
             napping = false;
             emo.add("生气", 12);
             Emotion.record("生气");
-            showBubble("干嘛啦！人家正睡得香！", 3000);
+            showMinorBubble("干嘛啦！人家正睡得香！", 3000);
             aiChat("用户把你从睡梦中戳醒，你起床气很重");
             fly.switchTo("dizzy", 50);
         }
@@ -1071,9 +1150,8 @@ public class PetService extends Service implements Flyer.Host {
             if (Planner.focusTick()) {
                 String msg = Planner.finishFocus();
                 awardAff(10);
-                DataStore.setBlood(Math.min(100f, DataStore.getBlood() + 15));
                 emo.add("兴奋", 8);
-                showBubble(msg + " +10 好感 +15 血池", 5000);
+                showBubbleMajor(msg + " +10 好感", 5000);
                 aiChat("用户完成了一场 " + f.optInt("targetMin", 25) + " 分钟的专注，为他庆祝");
                 // 身体闪三下黄光
                 flashGlow();
@@ -1083,7 +1161,7 @@ public class PetService extends Service implements Flyer.Host {
         if (dnd || napping || dead) return;
         String msg = Planner.pollReminders();
         if (msg != null) {
-            showBubble(msg, 6000);
+            showBubbleMajor(msg, 6000);
             fly.switchTo("dash", 30);
         }
     }
@@ -1119,10 +1197,10 @@ public class PetService extends Service implements Flyer.Host {
             DataStore.sp().edit().putString("weatherCache", w).putString("weatherDay", today).apply();
             if (first) {
                 handler.post(() -> {
-                    showBubble("☀️ 今日天气：" + w, 8000);
+                    showBubbleMajor("☀️ 今日天气：" + w, 8000);
                     // 顺带催办
                     if (Planner.openCount() > 0) {
-                        handler.postDelayed(() -> showBubble("还有 " + Planner.openCount() + " 个待办没完成，今天的水喝了 " + Planner.waterToday() + "/8 杯～", 5000), 8500);
+                        handler.postDelayed(() -> showBubbleMajor("还有 " + Planner.openCount() + " 个待办没完成，今天的水喝了 " + Planner.waterToday() + "/8 杯～", 5000), 8500);
                     }
                 });
             }
@@ -1162,17 +1240,55 @@ public class PetService extends Service implements Flyer.Host {
         }
     }
 
-    /** 主动搭话：90s 轮询，冷却 = AI 说话间隔设置（默认 45s），60% 吐槽屏幕/40% 话题库 */
+    /**
+     * 主动搭话：节奏完全由用户设置决定 —— 每「基准间隔 n 分钟 ± 抖动」触发一次，
+     * 并受「每天最多几条(0=不限)」约束。30s 轮询一次来对齐这个时间点。
+     */
     private void idleChatTick() {
-        handler.postDelayed(this::idleChatTick, 90000);
+        handler.postDelayed(this::idleChatTick, 30000);
         if (dnd || napping || dead || workMode || pending) return;
-        if (System.currentTimeMillis() - Math.max(lastAiAt, lastInteractAt) < 45000) return;
+
+        long now = System.currentTimeMillis();
+        // 用户刚动过就先别插嘴，把下一次顺延
+        if (now - lastInteractAt < 60000L) {
+            nextAutoChatAt = now + autoChatGapMs();
+            return;
+        }
+        if (now < nextAutoChatAt) return;
+
+        // 每日上限（0 = 不限）；跨天自动清零
+        String today = new java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US).format(new Date());
+        if (!today.equals(DataStore.sp().getString("chatDay", ""))) {
+            DataStore.sp().edit().putString("chatDay", today).putInt("chatCount", 0).apply();
+        }
+        int cap = DataStore.getInt("chatDailyCap", 0);
+        if (cap > 0 && DataStore.sp().getInt("chatCount", 0) >= cap) {
+            nextAutoChatAt = now + 1800000L;   // 今天说够了，半小时后再看
+            return;
+        }
+
         String app = currentAppLabel();
         boolean talkApp = DataStore.getBool("appSense", true) && rnd.nextInt(100) < 60 && app != null;
         String topic = talkApp ? "（用户正在用 " + app + "，随口吐槽或调侃一句，要短）"
                 : randomTopic();
         if (topic == null) return;
+
+        DataStore.sp().edit()
+                .putInt("chatCount", DataStore.sp().getInt("chatCount", 0) + 1).apply();
+        nextAutoChatAt = now + autoChatGapMs();
         aiChat("主动搭话：" + topic);
+    }
+
+    private long nextAutoChatAt = 0;
+
+    /** 下一次主动搭话的等待时长：n 分钟 ± 抖动%（默认 10 分钟 ±50%） */
+    private long autoChatGapMs() {
+        float n = DataStore.getFloat("chatGapMin", 10f);
+        if (n < 0.5f) n = 0.5f;
+        int jit = Math.max(0, Math.min(100, DataStore.getInt("chatJitter", 50)));
+        float factor = 1f + (rnd.nextFloat() * 2f - 1f) * (jit / 100f);   // 1 ± 抖动
+        long ms = (long) (n * 60000f * Math.max(0.1f, factor));
+        return Math.max(30000L, ms);
     }
 
     private String lastTopic = null;
@@ -1288,7 +1404,7 @@ public class PetService extends Service implements Flyer.Host {
         // 小游戏
         String[] game = Extras.miniGame(rnd);
         if (game != null) {
-            showBubble("🎮 " + game[0] + "\n" + game[1], 9000);
+            showBubbleMajor("🎮 " + game[0] + "\n" + game[1], 9000);
             return;
         }
         // 小剧场
@@ -1318,7 +1434,7 @@ public class PetService extends Service implements Flyer.Host {
         handler.postDelayed(this::achieveTick, 120000);
         String ach = Extras.checkAchievements();
         if (ach != null) {
-            showBubble(ach, 6000);
+            showBubbleMajor(ach, 6000);
             emo.add("兴奋", 10);
         }
     }
@@ -1328,7 +1444,7 @@ public class PetService extends Service implements Flyer.Host {
         java.util.List<String> steps = Quotes.get("tutorial");
         for (int i = 0; i < steps.size(); i++) {
             final String t = steps.get(i);
-            handler.postDelayed(() -> showBubble(t, 4200), 800L + i * 5000L);
+            handler.postDelayed(() -> showBubbleMajor(t, 4200), 800L + i * 5000L);
         }
         handler.postDelayed(() -> {
             DataStore.putBool("tutorialDone", true);
@@ -1374,7 +1490,7 @@ public class PetService extends Service implements Flyer.Host {
         pet.setScaleX(sx);
         pet.setScaleY(sy);
         handler.postDelayed(() -> { pet.setScaleX(1f); pet.setScaleY(1f); }, 200);
-        if (rnd.nextInt(100) < 30) showBubble(Quotes.pick("bounce", rnd), 1200);
+        if (rnd.nextInt(100) < 30) showMinorBubble(Quotes.pick("bounce", rnd), 1200);
     }
 
     private long bounceAnimUntil = 0;
@@ -1433,7 +1549,7 @@ public class PetService extends Service implements Flyer.Host {
             boolean first = lastPeriod == null;
             lastPeriod = p[0];
             if (!first && !dnd && !napping && !dead) {
-                showBubble("🕐 " + p[0] + "了。" + p[1], 4000);
+                showBubbleMajor("🕐 " + p[0] + "了。" + p[1], 4000);
             }
         }
     }
@@ -1532,7 +1648,7 @@ public class PetService extends Service implements Flyer.Host {
         DataStore.putInt("talkCount", DataStore.getInt("talkCount", 0) + 1);
         if (DataStore.getInt("talkCount", 0) >= 50 && !DataStore.getBool("ach_talk", false)) {
             DataStore.putBool("ach_talk", true);
-            showBubble("🏆 解锁成就：话痨之友 💬", 5000);
+            showBubbleMajor("🏆 解锁成就：话痨之友 💬", 5000);
         }
         logChat("你", text);
         aiChat("用户对你说：" + text);
@@ -1750,14 +1866,13 @@ public class PetService extends Service implements Flyer.Host {
     public String feedStatusText() {
         DataStore.tickOverTime();
         float sat = DataStore.getSatiety();
-        return "饱食度 " + (int) sat + "/100（" + DataStore.hungerText(sat) + "）· " + poolStatusText();
+        return "饱食度 " + (int) sat + "/100（" + DataStore.hungerText(sat) + "）· " + donationStatusText();
     }
 
-    /** 血池/累计献血（设置页状态行用；饱食度由进度条单独展示） */
-    public String poolStatusText() {
+    /** 累计献血/称号（设置页状态行用；饱食度由进度条单独展示） */
+    public String donationStatusText() {
         DataStore.tickOverTime();
-        return "血池 " + (int) DataStore.getBlood() + "/100 · 累计献血 "
-                + (int) DataStore.getBloodTotal() + "（" + DataStore.bloodTitle() + "）";
+        return "累计献血 " + (int) DataStore.getBloodTotal() + "（" + DataStore.bloodTitle() + "）";
     }
 
     public void logChat(String who, String text) {
@@ -1884,7 +1999,7 @@ public class PetService extends Service implements Flyer.Host {
         if (pending) return;
         pending = true;
         lastAiAt = System.currentTimeMillis();
-        showBubble("对方正在回应中...", 60000);
+        showBubbleMajor("对方正在回应中...", 60000);
         final String body;
         try {
             JSONObject o = new JSONObject();
@@ -1968,8 +2083,8 @@ public class PetService extends Service implements Flyer.Host {
             logChat("蚊", fReply == null ? q("fallback") : fReply);
             handler.post(() -> {
                 pending = false;
-                if (fReply == null) showBubble(q("fallback"), 3000);
-                else showBubble(fReply, 6000);
+                if (fReply == null) showBubbleMajor(q("fallback"), 3000);
+                else showBubbleMajor(fReply, 6000);
             });
         }).start();
     }
