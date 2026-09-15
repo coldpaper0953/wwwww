@@ -574,7 +574,7 @@ public class SettingsActivity extends Activity {
         aboutCard.addView(crashBtn);
         aboutCard.addView(gap(6));
         TextView about = small("#AAAAAA", Gravity.CENTER);
-        about.setText("嗡嗡嗡手机版 · MADE by芬芳小鼠 · 还原版");
+        about.setText("嗡嗡嗡手机版 · 还原版");
         aboutCard.addView(about);
         root.addView(aboutCard);
 
