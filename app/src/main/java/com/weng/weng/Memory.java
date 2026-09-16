@@ -119,7 +119,9 @@ public class Memory {
         List<String> l = longTerm();
         if (l.isEmpty()) return "";
         StringBuilder sb = new StringBuilder("\n【长期记忆】\n");
-        for (String s : l) sb.append("· ").append(s).append('\n');
+        for (String s : l) {
+            sb.append("· ").append(s.length() > 120 ? s.substring(0, 120) + "…" : s).append('\n');
+        }
         return sb.toString();
     }
 
@@ -214,10 +216,15 @@ public class Memory {
             String err = null, digest = null;
             try {
                 StringBuilder sb = new StringBuilder();
-                for (JSONObject o : raw) {
+                int from = Math.max(0, raw.size() - 60);            // 只带最近 60 条，总量封顶
+                for (int i = from; i < raw.size() && sb.length() < 10000; i++) {
+                    JSONObject o = raw.get(i);
+                    String ev = o.optString("ev", "");
+                    String rp = o.optString("reply", "");
+                    if (ev.length() > 100) ev = ev.substring(0, 100) + "…";
+                    if (rp.length() > 160) rp = rp.substring(0, 160) + "…";
                     sb.append('[').append(o.optString("t", "")).append("] 情景：")
-                            .append(o.optString("ev", "")).append(" 回复：")
-                            .append(o.optString("reply", "")).append('\n');
+                            .append(ev).append(" 回复：").append(rp).append('\n');
                 }
                 String sys = "你是记忆整理器。把一段宠物蚊子与用户的互动流水整理成不超过 " + keep()
                         + " 条长期记忆条目，每条一行，格式：用户[事实/喜好/重要事件]。只输出条目，不要编号不要客套。";

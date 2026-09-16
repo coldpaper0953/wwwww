@@ -1325,7 +1325,7 @@ public class PetService extends Service implements Flyer.Host {
         standing = false;
         approaching = false;
         emo.add("生气", 15);
-        Emotion.record(emo.dominant());
+        emo.record();
         hideBubble();
         showBubble("你把我拍扁了！！！", 1500);
         handler.postDelayed(() -> {
@@ -1510,7 +1510,7 @@ public class PetService extends Service implements Flyer.Host {
         if (napping) {
             napping = false;
             emo.add("生气", 12);
-            Emotion.record("生气");
+            emo.record();
             showMinorBubble("干嘛啦！人家正睡得香！", 3000);
             aiChat("用户把你从睡梦中戳醒，你起床气很重");
             fly.switchTo("dizzy", 50);
@@ -1526,7 +1526,7 @@ public class PetService extends Service implements Flyer.Host {
         String d = emo.dominant();
         if (d != null && !d.equals(lastDominant)) {
             lastDominant = d;
-            Emotion.record(d);
+            emo.record();
             if (d.equals("开心")) playEmo(happyF, 1);
             else if (d.equals("生气") || d.equals("孤独")) playEmo(sadF, 1);
         } else if (d == null) {
@@ -2424,6 +2424,13 @@ public class PetService extends Service implements Flyer.Host {
 
     // ---------------- AI 对话（原生转发，无 CORS 问题） ----------------
 
+    /** 兜底台词判定：命中说明这行是"请求失败的占位文本"，不该发给模型 */
+    private static boolean isFallbackText(String s) {
+        if (s == null) return false;
+        return s.contains("信号不太好") || s.contains("信号弱") || s.contains("听不清")
+                || s.contains("先自己玩会儿") || s.contains("等会儿再聊");
+    }
+
     public void aiChat(String situation) {
         if (pending) return;
         pending = true;
@@ -2452,12 +2459,14 @@ public class PetService extends Service implements Flyer.Host {
             synchronized (chatLog) {
                 hist = new java.util.ArrayList<String>(chatLog);
             }
-            int start = Math.max(0, hist.size() - 20);
+            int start = Math.max(0, hist.size() - 12);
             for (int i = start; i < hist.size(); i++) {
                 String line = hist.get(i);
                 String role = line.startsWith("你：") ? "user" : "assistant";
                 String content = line.startsWith("你：") ? line.substring(2) : line.substring(line.indexOf("：") + 1);
                 if (content.trim().isEmpty()) continue;
+                if (isFallbackText(content)) continue;          // 旧版把请求失败的兜底台词记进了历史，全部跳过
+                if (content.length() > 160) content = content.substring(0, 160) + "…";
                 msgs.put(new JSONObject().put("role", role).put("content", content));
             }
             o.put("messages", msgs);
@@ -2509,7 +2518,7 @@ public class PetService extends Service implements Flyer.Host {
                     });
                 }
             }
-            logChat("蚊", fReply == null ? q("fallback") : fReply);
+            if (fReply != null) logChat("蚊", fReply);   // 失败的兜底台词不进历史：否则网络差一阵后，最近20行全是"信号弱"，AI收到一堆错误文本
             handler.post(() -> {
                 pending = false;
                 if (fReply == null) showBubbleMajor(q("fallback"), 3000);

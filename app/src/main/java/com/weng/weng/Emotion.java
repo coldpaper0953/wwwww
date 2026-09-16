@@ -52,10 +52,25 @@ public class Emotion {
         return null;
     }
 
-    /** 情绪四维快照文本（注入 AI 提示词用） */
+    /** 情绪向量（注入 AI 提示词用）：当前四维 + 近期走势，纯数字 */
     public String describe() {
-        return "开心" + (int) happy + "/生气" + (int) angry + "/孤独" + (int) lonely + "/兴奋" + (int) excited
-                + "，主导情绪：" + (dominant() == null ? "平静" : dominant());
+        StringBuilder trend = new StringBuilder("[");
+        try {
+            org.json.JSONArray l = new org.json.JSONArray(DataStore.sp().getString("moodVec", "[]"));
+            int from = Math.max(0, l.length() - 5);
+            for (int i = from; i < l.length(); i++) {
+                org.json.JSONArray v = l.optJSONArray(i);
+                if (v == null || v.length() < 4) continue;
+                if (trend.length() > 1) trend.append(" → ");
+                trend.append((int) v.optDouble(0)).append(',').append((int) v.optDouble(1)).append(',')
+                        .append((int) v.optDouble(2)).append(',').append((int) v.optDouble(3));
+            }
+        } catch (Exception ignored) {
+        }
+        trend.append(']');
+        return "心情向量[开心,生气,孤独,兴奋]=" + (int) happy + "," + (int) angry + "," + (int) lonely + ","
+                + (int) excited + "，主导：" + (dominant() == null ? "平静" : dominant())
+                + "；近期走势" + trend;
     }
 
     public void load() {
@@ -75,38 +90,85 @@ public class Emotion {
         DataStore.saveObj("emotion", o);
     }
 
-    /** 最近 10 条心情记录（时间+主导情绪），供走势图显示 */
-    public static void record(String mood) {
-        if (mood == null) mood = "平静";
-        List<JSONObject> l = DataStore.arr("moodLog");
-        JSONObject o = new JSONObject();
+    /** 心情向量存储：最近 10 条四维快照 [开心,生气,孤独,兴奋]（纯数字，不再存文本条目） */
+    public void record() {
+        org.json.JSONArray snap = new org.json.JSONArray();
         try {
-            o.put("t", new SimpleDateFormat("MM-dd HH:mm", Locale.US).format(new Date()));
-            o.put("mood", mood);
+            snap.put(Math.round(happy)).put(Math.round(angry)).put(Math.round(lonely)).put(Math.round(excited));
         } catch (Exception ignored) {
         }
-        l.add(o);
-        while (l.size() > 10) l.remove(0);
-        DataStore.saveArr("moodLog", l);
+        org.json.JSONArray l;
+        try {
+            l = new org.json.JSONArray(DataStore.sp().getString("moodVec", "[]"));
+        } catch (Exception e) {
+            l = new org.json.JSONArray();
+        }
+        l.put(snap);
+        while (l.length() > 10) l.remove(0);
+        DataStore.sp().edit().putString("moodVec", l.toString()).apply();
     }
 
-    /** 走势图：10 条记录的表情点阵 + 当前主导情绪 */
+    /** 旧版 moodLog（文本条目）一次性迁移成向量 */
+    public static void migrateMoodLog() {
+        try {
+            if (!DataStore.sp().getString("moodVec", "[]").equals("[]")) return;   // 已有向量
+            List<JSONObject> old = DataStore.arr("moodLog");
+            if (old.isEmpty()) return;
+            org.json.JSONArray v = new org.json.JSONArray();
+            for (JSONObject o : old) {
+                String m = o.optString("mood", "平静");
+                org.json.JSONArray snap = new org.json.JSONArray();
+                if (m.equals("开心"))      snap.put(70).put(5).put(15).put(30);
+                else if (m.equals("生气")) snap.put(15).put(70).put(25).put(30);
+                else if (m.equals("孤独")) snap.put(15).put(10).put(75).put(15);
+                else if (m.equals("兴奋")) snap.put(60).put(10).put(10).put(85);
+                else                       snap.put(40).put(10).put(30).put(35);
+                v.put(snap);
+            }
+            DataStore.sp().edit().putString("moodVec", v.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 四维向量 → 主导情绪（供渲染快照） */
+    private static String dominantOf(float h, float a, float lo, float e) {
+        float max = Math.max(h, Math.max(a, Math.max(lo, e)));
+        if (h >= 15 && h >= max) return "开心";
+        if (a >= 15 && a >= max) return "生气";
+        if (e >= 15 && e >= max) return "兴奋";
+        if (lo >= 15) return "孤独";
+        return "平静";
+    }
+
+    /** 走势图：向量快照的表情点阵 + 当前四维数值 */
     public static String chart() {
-        List<JSONObject> l = DataStore.arr("moodLog");
-        if (l.isEmpty()) return "（还没有心情记录）";
+        migrateMoodLog();
         StringBuilder sb = new StringBuilder();
         String cur = "平静";
-        for (JSONObject o : l) {
-            String m = o.optString("mood", "平静");
-            cur = m;
-            String mark = "😐";
-            if (m.equals("开心")) mark = "😊";
-            else if (m.equals("生气")) mark = "😠";
-            else if (m.equals("孤独")) mark = "😞";
-            else if (m.equals("兴奋")) mark = "🤩";
-            sb.append(mark).append(' ');
+        try {
+            org.json.JSONArray l = new org.json.JSONArray(DataStore.sp().getString("moodVec", "[]"));
+            for (int i = 0; i < l.length(); i++) {
+                org.json.JSONArray v = l.optJSONArray(i);
+                if (v == null || v.length() < 4) continue;
+                cur = dominantOf((float) v.optDouble(0), (float) v.optDouble(1),
+                        (float) v.optDouble(2), (float) v.optDouble(3));
+                String mark = "😐";
+                if (cur.equals("开心")) mark = "😊";
+                else if (cur.equals("生气")) mark = "😠";
+                else if (cur.equals("孤独")) mark = "😞";
+                else if (cur.equals("兴奋")) mark = "🤩";
+                sb.append(mark).append(' ');
+            }
+        } catch (Exception ignored) {
         }
-        return sb.toString().trim() + "  当前：" + cur;
+        if (sb.length() == 0) return "（还没有心情记录）";
+        String curVec = "（宠物未运行）";
+        if (PetService.instance != null) {
+            Emotion em = PetService.instance.emo;
+            curVec = "开心" + (int) em.happy + ",生气" + (int) em.angry + ",孤独" + (int) em.lonely
+                    + ",兴奋" + (int) em.excited;
+        }
+        return sb.toString().trim() + "  当前：" + curVec;
     }
 
     /** 全量重建列表（DataStore.arr 的便捷复制） */
