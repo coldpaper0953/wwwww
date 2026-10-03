@@ -292,7 +292,7 @@ public class PlannerActivity extends Activity {
             r.addView(gapW(4));
             TextView del = button("✖");
             del.setOnClickListener(v -> {
-                new AlertDialog.Builder(this)
+                new AlertDialog.Builder(this, R.style.AppDialog)
                         .setTitle("删除习惯")
                         .setMessage("确定删除「" + Planner.habitCard(idx) + "」？")
                         .setPositiveButton("删", (d, w) -> {
@@ -359,8 +359,8 @@ public class PlannerActivity extends Activity {
         c.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(12));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         c.setBackground(g);
         return c;
     }
@@ -391,8 +391,8 @@ public class PlannerActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(10));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         return g;
     }
 

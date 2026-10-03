@@ -40,6 +40,8 @@ public class SettingsActivity extends Activity {
     private android.widget.SeekBar standLiftSlider;
     private TextView standLiftVal;
     private TextView jumpModeBtn;
+    /** 更新按钮：存档里有待更新版本时，文案会变成「有新版本 …」 */
+    private TextView updBtn;
     private boolean chatDragging = false;
     /** 自定义形象：每个动作一行的状态文本（仅桌宠2.0 显示） */
     private TextView[] skinRows;
@@ -470,14 +472,14 @@ public class SettingsActivity extends Activity {
         exRow.setOrientation(LinearLayout.HORIZONTAL);
         TextView fortune = button("🔮 今日运势");
         fortune.setOnClickListener(v ->
-                new AlertDialog.Builder(this).setTitle(Ico.s(this, "🔮 今日运势"))
+                new AlertDialog.Builder(this, R.style.AppDialog).setTitle(Ico.s(this, "🔮 今日运势"))
                         .setMessage(Ico.s(this, com.weng.weng.Extras.fortune()))
                         .setPositiveButton("关闭", null).show());
         exRow.addView(fortune);
         exRow.addView(gapW(8));
         TextView guide = button("📖 饲养指南");
         guide.setOnClickListener(v ->
-                new AlertDialog.Builder(this).setTitle("📖 饲养指南")
+                new AlertDialog.Builder(this, R.style.AppDialog).setTitle("📖 饲养指南")
                         .setMessage(com.weng.weng.Extras.guideText()).setPositiveButton("懂了", null).show());
         exRow.addView(guide);
         exCard.addView(exRow);
@@ -542,7 +544,7 @@ public class SettingsActivity extends Activity {
             com.weng.weng.DataStore.putBool("appSense", on);
             if (on) {
                 // 引导去系统授权"使用情况访问权限"
-                new AlertDialog.Builder(this)
+                new AlertDialog.Builder(this, R.style.AppDialog)
                         .setTitle("App 感知说明")
                         .setMessage("蚊子只读取「当前打开的应用名字」（不读内容）。\n\n要让它生效，请在接下来的系统页面里找到 " + getString(R.string.app_name) + "，允许「使用情况访问权限」。")
                         .setPositiveButton("去授权", (d, w) -> startActivity(new Intent(
@@ -630,14 +632,9 @@ public class SettingsActivity extends Activity {
         LinearLayout aboutCard = card();
         LinearLayout aboutRow = new LinearLayout(this);
         aboutRow.setOrientation(LinearLayout.HORIZONTAL);
-        TextView upd = button("🔄 检查更新");
-        upd.setOnClickListener(v -> {
-            if (PetService.instance != null) {
-                Toast.makeText(this, "检查更新中…", Toast.LENGTH_SHORT).show();
-                PetService.instance.checkUpdate(true);
-            }
-        });
-        aboutRow.addView(upd);
+        updBtn = button("🔄 检查更新");
+        updBtn.setOnClickListener(v -> onCheckUpdateClicked());
+        aboutRow.addView(updBtn);
         aboutRow.addView(gapW(8));
         TextView bootBtn = button("📲 开机自启：关");
         bootBtn.setOnClickListener(v -> {
@@ -769,7 +766,7 @@ public class SettingsActivity extends Activity {
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { rebuild.run(); }
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
-        pickDlg = new AlertDialog.Builder(this)
+        pickDlg = new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("📡 选择模型（共 " + models.size() + " 个）")
                 .setView(box)
                 .setNegativeButton("取消", null)
@@ -810,7 +807,7 @@ public class SettingsActivity extends Activity {
             }
         }
         sb.append("\n—— 心情走势 ——\n").append(com.weng.weng.Emotion.chart());
-        new AlertDialog.Builder(this).setTitle("🏆 成就与回忆").setMessage(sb.toString())
+        new AlertDialog.Builder(this, R.style.AppDialog).setTitle("🏆 成就与回忆").setMessage(sb.toString())
                 .setPositiveButton("关闭", null).show();
     }
 
@@ -831,7 +828,7 @@ public class SettingsActivity extends Activity {
         final EditText in = new EditText(this);
         in.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         in.setText(String.valueOf(PetService.instance.affection));
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("修改好感度")
                 .setView(in)
                 .setPositiveButton("确定", (d, w) -> {
@@ -867,10 +864,71 @@ public class SettingsActivity extends Activity {
         super.onDestroy();
     }
 
+    /** 点「检查更新」：存档里已有待更新信息就直接弹确认框，否则先查询、查到再弹 */
+    private void onCheckUpdateClicked() {
+        if (PetService.instance == null) {
+            Toast.makeText(this, "宠物还没启动，稍后再试", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String tag = DataStore.getString(PetService.K_UPD_TAG, "");
+        String url = DataStore.getString(PetService.K_UPD_URL, "");
+        if (!tag.isEmpty() && !url.isEmpty()) {
+            showUpdateDialog(tag, DataStore.getString(PetService.K_UPD_NOTES, ""),
+                    DataStore.getLong(PetService.K_UPD_SIZE, 0), url);
+            return;
+        }
+        Toast.makeText(this, "检查更新中…", Toast.LENGTH_SHORT).show();
+        PetService.instance.checkUpdate(true, (hasNew, t, notes, size, u, error) -> {
+            if (isFinishing() || isDestroyed()) return;
+            if (error != null) {
+                Toast.makeText(this, "检查失败：" + error, Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (!hasNew) {
+                Toast.makeText(this, "已是最新版本 v" + PetService.instance.curVersion(), Toast.LENGTH_SHORT).show();
+                return;
+            }
+            showUpdateDialog(t, notes, size, u);
+        });
+    }
+
+    /** 更新确认框：先把本次更新内容摆出来，用户点「下载并安装」才开始下载 */
+    private void showUpdateDialog(String tag, String notes, long size, String url) {
+        String body = (notes == null || notes.trim().isEmpty())
+                ? "（这个版本没有写更新说明）" : notes.trim();
+        // 说明可能很长，限制一下字数，免得弹窗撑满整屏（完整版在 GitHub 更新页面上）
+        final int MAX_CHARS = 600;
+        if (body.length() > MAX_CHARS) {
+            body = body.substring(0, MAX_CHARS) + "\n……（剩余内容见 GitHub 更新页面）";
+        }
+        ScrollView sv = new ScrollView(this);
+        TextView tv = new TextView(this);
+        tv.setTextSize(13);
+        tv.setTextColor(Color.parseColor("#111111"));
+        tv.setPadding(dp(18), dp(4), dp(18), dp(4));
+        tv.setText("最新版本：" + tag + (size > 0 ? "（" + (size / 1024) + " KB）" : "") + "\n\n"
+                + "本次更新内容：\n" + body + "\n\n"
+                + "点「下载并安装」后才会开始下载。");
+        sv.addView(tv);
+        new AlertDialog.Builder(this, R.style.AppDialog)
+                .setTitle("发现新版本")
+                .setView(sv)
+                .setPositiveButton("下载并安装", (d, w) -> {
+                    Toast.makeText(this, "开始下载，完成后会拉起安装", Toast.LENGTH_SHORT).show();
+                    PetService.instance.downloadAndInstall(url);
+                })
+                .setNegativeButton("以后再说", null)
+                .show();
+    }
+
     private void refresh() {
         refreshChatSettings();
         refreshSkinRows();
         refreshPersonaRow();
+        if (updBtn != null) {
+            String ut = DataStore.getString(PetService.K_UPD_TAG, "");
+            updBtn.setText(Ico.s(this, ut.isEmpty() ? "🔄 检查更新" : "⬆ 有新版本 " + ut + "，点此更新"));
+        }
         if (PetService.instance == null) {
             affLabel.setText("宠物未运行");
             return;
@@ -940,7 +998,7 @@ public class SettingsActivity extends Activity {
         t.setTextIsSelectable(true);
         t.setText(readCrashLog());
         sv.addView(t);
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("崩溃日志")
                 .setView(sv)
                 .setPositiveButton("关闭", null)
@@ -1018,8 +1076,8 @@ public class SettingsActivity extends Activity {
         satBar.setOrientation(LinearLayout.HORIZONTAL);
         GradientDrawable track = new GradientDrawable();
         track.setColor(Color.parseColor("#EDEBE3"));
-        track.setCornerRadius(dp(8));
-        track.setStroke(dp(2), Color.parseColor("#111111"));
+        track.setCornerRadius(dp(3));
+        track.setStroke(dp(1), Color.parseColor("#111111"));
         satBar.setBackground(track);
         int pad = dp(2);
         satBar.setPadding(pad, pad, pad, pad);
@@ -1046,7 +1104,7 @@ public class SettingsActivity extends Activity {
         int col = sat < 15f ? 0xFFE24B4A : (sat < 35f ? 0xFFEF9F27 : 0xFF639922);
         GradientDrawable fillBg = new GradientDrawable();
         fillBg.setColor(col);
-        fillBg.setCornerRadius(dp(6));
+        fillBg.setCornerRadius(dp(3));
         satFill.setBackground(fillBg);
 
         float rest = 100f - sat;
@@ -1077,8 +1135,8 @@ public class SettingsActivity extends Activity {
         c.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(12));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         c.setBackground(g);
         return c;
     }
@@ -1107,8 +1165,8 @@ public class SettingsActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(10));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         return g;
     }
 
@@ -1203,6 +1261,10 @@ public class SettingsActivity extends Activity {
         in.setGravity(Gravity.TOP);
         in.setTextSize(13);
         in.setTextColor(Color.parseColor("#111111"));
+        // 弹窗已是浅色底，输入框也用 App 内同款「白底 + 细黑边」，别用系统下划线样式
+        in.setHintTextColor(Color.parseColor("#999999"));
+        in.setPadding(dp(10), dp(8), dp(10), dp(8));
+        in.setBackground(box());
         in.setHint("你叫……");
         in.setText(Memory.petPersona());
         box.addView(in);
@@ -1231,7 +1293,7 @@ public class SettingsActivity extends Activity {
             @Override public void afterTextChanged(android.text.Editable s) { upd.run(); }
         });
 
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("宠物人设（会拼进 AI 提示词）")
                 .setView(box)
                 .setPositiveButton("保存", (d, w) -> {

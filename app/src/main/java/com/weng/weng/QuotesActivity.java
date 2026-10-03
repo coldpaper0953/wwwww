@@ -59,7 +59,7 @@ public class QuotesActivity extends Activity {
         root.addView(gap(10));
 
         TextView reset = button("↩ 全部恢复默认");
-        reset.setOnClickListener(v -> new AlertDialog.Builder(this)
+        reset.setOnClickListener(v -> new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("恢复默认")
                 .setMessage("所有自定义台词都会清掉，恢复出厂文案。确定？")
                 .setPositiveButton("恢复", (d, w) -> {
@@ -122,7 +122,7 @@ public class QuotesActivity extends Activity {
         StringBuilder sb = new StringBuilder();
         for (String s : Quotes.get(k)) sb.append(s).append('\n');
         in.setText(sb.toString());
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle(Quotes.label(k))
                 .setView(in)
                 .setPositiveButton("保存", (d, w) -> {
@@ -167,8 +167,8 @@ public class QuotesActivity extends Activity {
         c.setPadding(dp(12), dp(10), dp(12), dp(10));
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(12));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         c.setBackground(g);
         return c;
     }
@@ -176,8 +176,8 @@ public class QuotesActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(10));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         return g;
     }
 

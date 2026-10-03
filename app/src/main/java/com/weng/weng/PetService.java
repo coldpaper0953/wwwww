@@ -297,11 +297,28 @@ public class PetService extends Service implements Flyer.Host {
         return 0;
     }
 
-    /** 查询 GitHub 最新 Release；比当前新则下载 APK，完成后自动拉起安装器。
-     *  manual=true 为用户手动触发（失败/已是最新时气泡告知），false 为启动自检（静默）。 */
-    public void checkUpdate() { checkUpdate(false); }
+    /** 更新检查结果回调（保证在主线程执行） */
+    public interface UpdateCb {
+        void onResult(boolean hasNew, String tag, String notes, long size, String url, String error);
+    }
 
-    public void checkUpdate(final boolean manual) {
+    /** 待更新信息在存档里的 key（设置页读它显示「有新版本」，并取更新说明弹确认框） */
+    public static final String K_UPD_TAG = "updTag";
+    public static final String K_UPD_NOTES = "updNotes";
+    public static final String K_UPD_URL = "updUrl";
+    public static final String K_UPD_SIZE = "updSize";
+
+    /** 启动自检：静默，发现新版只记录、不下载 */
+    public void checkUpdate() { checkUpdate(false, null); }
+
+    /**
+     * 查询 GitHub 最新 Release。
+     *  manual=true 用户点「检查更新」触发（失败/已是最新会气泡反馈）；false 启动自检（全静默）。
+     *
+     *  重要：**发现新版本时绝不自动下载** —— 用户要求「必须本人点检查更新 + 确认后才更新」。
+     *  这里只把 tag / 更新说明 / 下载地址 / 体积写进存档，由设置页弹确认框，用户点了确认才下载。
+     */
+    public void checkUpdate(final boolean manual, final UpdateCb cb) {
         new Thread(() -> {
             try {
                 // 同一个仓库里放了两个版本（原版 v2.x / 桌宠2.0 pet2-v2.x），必须按 tag 前缀各取各的：
@@ -318,7 +335,8 @@ public class PetService extends Service implements Flyer.Host {
                 while ((n = is.read(buf)) > 0) bos.write(buf, 0, n);
                 is.close();
                 org.json.JSONArray releases = new org.json.JSONArray(bos.toString("UTF-8"));
-                String foundTag = "", foundUrl = null;
+                String foundTag = "", foundUrl = null, foundNotes = "";
+                long foundSize = 0;
                 for (int r = 0; r < releases.length(); r++) {
                     JSONObject j = releases.getJSONObject(r);
                     if (j.optBoolean("draft") || j.optBoolean("prerelease")) continue;
@@ -331,33 +349,60 @@ public class PetService extends Service implements Flyer.Host {
                         if (a.optString("name", "").endsWith(".apk")) {
                             foundUrl = a.optString("browser_download_url");
                             foundTag = t;
+                            foundNotes = j.optString("body", "");   // Release 正文＝本次更新内容
+                            foundSize = a.optLong("size", 0);
                             break;
                         }
                     }
                     if (foundUrl != null) break;
                 }
-                final String tag = foundTag;
+                final String tag = foundTag, notes = foundNotes;
+                final long size = foundSize;
                 String assetUrl = foundUrl;
                 if (tag.isEmpty() || assetUrl == null) {
                     if (manual) handler.post(() -> showBubbleMajor("检查更新失败：接口返回异常（稍后再试）", 4000));
+                    reply(cb, false, null, null, 0, null, "接口返回异常，稍后再试");
                     return;
                 }
                 String bareTag = tag.startsWith(Edition.RELEASE_TAG_PREFIX)
                         ? tag.substring(Edition.RELEASE_TAG_PREFIX.length()) : tag;
                 if (verCmp(bareTag, curVersion()) <= 0) {
+                    clearPendingUpdate();
                     if (manual) handler.post(() -> showBubbleMajor("已是最新版本 " + curVersion() + "～", 4000));
+                    reply(cb, false, tag, notes, size, assetUrl, null);
                     return;
                 }
-                handler.post(() -> showBubbleMajor("发现新版本 " + tag + "！正在下载…", 8000));
-                downloadAndInstall(assetUrl);
+                // 记下待更新信息：设置页据此把按钮变成「有新版本」，并弹确认框（不自动下载）
+                DataStore.putString(K_UPD_TAG, tag);
+                DataStore.putString(K_UPD_NOTES, notes);
+                DataStore.putString(K_UPD_URL, assetUrl);
+                DataStore.putLong(K_UPD_SIZE, size);
+                reply(cb, true, tag, notes, size, assetUrl, null);
             } catch (Exception e) {
                 // GitHub 在国内网络常不可直连；手动触发时告知用户而不是静默吞掉
                 if (manual) handler.post(() -> showBubbleMajor("检查更新失败：连不上 GitHub（需要能访问 github.com 的网络）", 6000));
+                reply(cb, false, null, null, 0, null, "连不上 GitHub（需要能访问 github.com 的网络）");
             }
         }).start();
     }
 
-    private void downloadAndInstall(String url) {
+    /** 把检查结果切回主线程交给调用方（cb 可为 null） */
+    private void reply(final UpdateCb cb, final boolean hasNew, final String tag, final String notes,
+                       final long size, final String url, final String error) {
+        if (cb == null) return;
+        handler.post(() -> cb.onResult(hasNew, tag, notes, size, url, error));
+    }
+
+    /** 清掉存档里的「待更新」信息（已是最新、或用户更新完之后） */
+    public void clearPendingUpdate() {
+        DataStore.putString(K_UPD_TAG, "");
+        DataStore.putString(K_UPD_NOTES, "");
+        DataStore.putString(K_UPD_URL, "");
+        DataStore.putLong(K_UPD_SIZE, 0);
+    }
+
+    /** 用户确认后才会走到这里：下载 APK 并拉起安装器 */
+    public void downloadAndInstall(String url) {
         new Thread(() -> {
             try {
                 File dir = getExternalFilesDir(null);

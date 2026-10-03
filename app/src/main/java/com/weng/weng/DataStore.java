@@ -203,4 +203,11 @@ public class DataStore {
     public static float getFloat(String k, float def) { return P.getFloat(k, def); }
 
     public static void putFloat(String k, float v) { P.edit().putFloat(k, v).apply(); }
+
+    public static String getString(String k, String def) {
+        String s = P.getString(k, def);
+        return s == null ? def : s;
+    }
+
+    public static void putString(String k, String v) { P.edit().putString(k, v == null ? "" : v).apply(); }
 }

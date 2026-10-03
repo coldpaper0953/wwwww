@@ -91,8 +91,8 @@ public class TheaterActivity extends Activity {
         t.setPadding(dp(16), dp(14), dp(16), dp(14));
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(14));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         t.setBackground(g);
         return t;
     }

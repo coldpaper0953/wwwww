@@ -112,7 +112,7 @@ public class MemoryActivity extends Activity {
         c4.addView(rawBox);
         LinearLayout rRow = row();
         TextView clearB = button("🗑 清空全部记忆");
-        clearB.setOnClickListener(v -> new AlertDialog.Builder(this)
+        clearB.setOnClickListener(v -> new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("清空记忆")
                 .setMessage("原始记忆和长期记忆都会清空，确定？")
                 .setPositiveButton("清空", (d, w) -> {
@@ -239,7 +239,7 @@ public class MemoryActivity extends Activity {
         keepLabel.setText("整理后保留条数：长期记忆最多留几条（3-50）");
         box.addView(keepLabel);
         box.addView(keepIn);
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("记忆整理参数")
                 .setView(box)
                 .setPositiveButton("保存", (d, w) -> {
@@ -262,7 +262,7 @@ public class MemoryActivity extends Activity {
         in.setGravity(Gravity.TOP);
         in.setTextSize(13);
         in.setText(Memory.userPersona());
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("我的身份（会拼进 AI 提示词）")
                 .setView(in)
                 .setPositiveButton("保存", (d, w) -> {
@@ -295,7 +295,7 @@ public class MemoryActivity extends Activity {
         l3.setText("模型名");
         box.addView(l3);
         box.addView(modelIn);
-        new AlertDialog.Builder(this)
+        new AlertDialog.Builder(this, R.style.AppDialog)
                 .setTitle("副 API（记忆整理专用）")
                 .setView(box)
                 .setPositiveButton("保存", (d, w) -> {
@@ -349,8 +349,8 @@ public class MemoryActivity extends Activity {
         c.setPadding(dp(12), dp(10), dp(12), dp(10));
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(12));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         c.setBackground(g);
         return c;
     }
@@ -370,8 +370,8 @@ public class MemoryActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(10));
-        g.setStroke(dp(2), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(3));
+        g.setStroke(dp(1), Color.parseColor("#111111"));
         return g;
     }
 

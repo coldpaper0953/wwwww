@@ -2,4 +2,6 @@
 <resources>
     <!-- 全局页面底色（与各页面 root 的 #F5F4EF 保持一致） -->
     <color name="page_bg">#F5F4EF</color>
+    <!-- 弹窗面板底色：纯白，与 App 内卡片一致，配深色文字 -->
+    <color name="dialog_bg">#FFFFFF</color>
 </resources>

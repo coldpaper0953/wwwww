@@ -17,6 +17,9 @@ import java.util.Date;
 /** 崩溃兜底：把异常栈写到外部存储 crash_log.txt 并显示出来（可截图发回） */
 public class CrashActivity extends Activity {
 
+    /** 源代码 / 问题反馈地址：连崩溃日志一起带上，方便直接定位到仓库与版本 */
+    private static final String SOURCE_URL = "https://github.com/" + Edition.GITHUB_REPO;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -29,9 +32,19 @@ public class CrashActivity extends Activity {
         t.setTextColor(Color.parseColor("#FF7060"));
         t.setTextSize(11);
         t.setPadding(24, 24, 24, 24);
-        t.setText(getString(R.string.app_name) + "崩溃了！把这段截图发回去即可：\n\n" + stack);
+        t.setText(getString(R.string.app_name) + "崩溃了！把这段截图发回去即可\n"
+                + "版本 v" + versionName() + "\n"
+                + "源代码 / 反馈：" + SOURCE_URL + "\n\n" + stack);
         sc.addView(t);
         setContentView(sc);
+    }
+
+    private String versionName() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "?";
+        }
     }
 
     public static void install(final android.content.Context app) {
@@ -44,8 +57,18 @@ public class CrashActivity extends Activity {
                 File dir = app.getExternalFilesDir(null);
                 if (dir != null) {
                     FileOutputStream fos = new FileOutputStream(new File(dir, "crash_log.txt"), true);
+                    String head;
+                    try {
+                        head = app.getString(R.string.app_name) + " v"
+                                + app.getPackageManager().getPackageInfo(app.getPackageName(), 0).versionName;
+                    } catch (Exception e2) {
+                        head = app.getString(R.string.app_name);
+                    }
                     fos.write((new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())
-                            + "\n" + stack + "\n\n").getBytes("UTF-8"));
+                            + "  " + head + "\n"
+                            + "源代码 / 反馈：" + SOURCE_URL
+                            + "　（把这段日志连同上面的版本号一起发过去即可定位）\n"
+                            + stack + "\n\n").getBytes("UTF-8"));
                     fos.close();
                 }
                 Intent i = new Intent(app, CrashActivity.class);
