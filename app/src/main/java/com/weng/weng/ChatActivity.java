@@ -48,7 +48,7 @@ public class ChatActivity extends Activity {
             btn.setTypeface(Typeface.DEFAULT_BOLD);
             btn.setTextColor(Color.parseColor("#111111"));
             btn.setGravity(Gravity.CENTER);
-            btn.setPadding(dp(8), dp(8), dp(8), dp(8));
+            btn.setPadding(dp(8), dp(5), dp(8), dp(5));   // 边框到文字的留白收紧
             GradientDrawable mb = new GradientDrawable();
             mb.setColor(Color.WHITE);
             mb.setCornerRadius(dp(3));
@@ -93,7 +93,7 @@ public class ChatActivity extends Activity {
         send.setTypeface(Typeface.DEFAULT_BOLD);
         send.setTextColor(Color.parseColor("#111111"));
         send.setGravity(Gravity.CENTER);
-        send.setPadding(dp(16), dp(12), dp(16), dp(12));
+        send.setPadding(dp(14), dp(8), dp(14), dp(8));   // 边框到文字的留白收紧
         GradientDrawable sb = new GradientDrawable();
         sb.setColor(Color.WHITE);
         sb.setCornerRadius(dp(3));

@@ -362,7 +362,8 @@ public class MemoryActivity extends Activity {
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(14), dp(8), dp(14), dp(8));
+        // 边框到文字的留白收紧
+        t.setPadding(dp(12), dp(5), dp(12), dp(5));
         t.setBackground(box());
         return t;
     }

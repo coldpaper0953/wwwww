@@ -1157,7 +1157,8 @@ public class SettingsActivity extends Activity {
         t.setTextSize(13);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(14), dp(10), dp(14), dp(10));
+        // 边框到文字的留白收紧（原来 14/10，按钮显得太空）
+        t.setPadding(dp(12), dp(6), dp(12), dp(6));
         t.setBackground(box());
         return t;
     }
