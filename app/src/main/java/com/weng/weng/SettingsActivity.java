@@ -103,11 +103,15 @@ public class SettingsActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
+        // 输入框和按钮等高、垂直居中，两者的边框才不会上下错位
+        row.setGravity(Gravity.CENTER_VERTICAL);
         input = new EditText(this);
         input.setHint("跟它说点什么…");
         input.setTextSize(14);
         input.setMaxLines(1);
-        input.setPadding(dp(12), dp(9), dp(12), dp(9));
+        input.setPadding(dp(12), dp(8), dp(12), dp(8));
+        input.setMinHeight(dp(36));
+        input.setMinimumHeight(dp(36));
         input.setBackground(box());
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         row.addView(input, ilp);
@@ -414,6 +418,7 @@ public class SettingsActivity extends Activity {
         apiModelField = apiInput("模型名", PetService.instance != null ? PetService.instance.apiModel : "");
         LinearLayout modelRow = new LinearLayout(this);
         modelRow.setOrientation(LinearLayout.HORIZONTAL);
+        modelRow.setGravity(Gravity.CENTER_VERTICAL);   // 模型输入框 + 「📡 拉取」按钮对齐
         LinearLayout.LayoutParams mlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         modelRow.addView(apiModelField, mlp);
         modelRow.addView(gapW(8));
@@ -433,6 +438,7 @@ public class SettingsActivity extends Activity {
         LinearLayout prankCard = card();
         LinearLayout pRow = new LinearLayout(this);
         pRow.setOrientation(LinearLayout.HORIZONTAL);
+        pRow.setGravity(Gravity.CENTER_VERTICAL);       // 蚊子数量输入框 + 「🦟 注入并隐藏」按钮对齐
         prankCount = apiInput("蚊子数量(1-10)", String.valueOf(com.weng.weng.DataStore.getInt("prankCount", 6)));
         LinearLayout.LayoutParams pcp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         pRow.addView(prankCount, pcp);
@@ -721,6 +727,8 @@ public class SettingsActivity extends Activity {
         search.setMaxLines(1);
         search.setBackground(box());
         search.setPadding(dp(10), dp(8), dp(10), dp(8));
+        search.setMinHeight(dp(36));
+        search.setMinimumHeight(dp(36));
         box.addView(search);
         box.addView(gap(6));
         final LinearLayout list = new LinearLayout(this);
@@ -819,6 +827,9 @@ public class SettingsActivity extends Activity {
         e.setMaxLines(1);
         e.setTextColor(Color.parseColor("#111111"));
         e.setPadding(dp(10), dp(8), dp(10), dp(8));
+        // 压掉系统默认的最小高度（约 48dp），和 button() 统一成 36dp —— 并排时边框才对得齐
+        e.setMinHeight(dp(36));
+        e.setMinimumHeight(dp(36));
         e.setBackground(box());
         return e;
     }
@@ -870,7 +881,9 @@ public class SettingsActivity extends Activity {
             Toast.makeText(this, "宠物还没启动，稍后再试", Toast.LENGTH_SHORT).show();
             return;
         }
-        String tag = DataStore.getString(PetService.K_UPD_TAG, "");
+        // 走 pendingUpdateTag()：它会把「不比当前版本新」的残留记录清掉，
+        // 避免升级完之后按钮还显示「有新版本」（见 PetService.pendingUpdateTag 的说明）
+        String tag = PetService.instance.pendingUpdateTag();
         String url = DataStore.getString(PetService.K_UPD_URL, "");
         if (!tag.isEmpty() && !url.isEmpty()) {
             showUpdateDialog(tag, DataStore.getString(PetService.K_UPD_NOTES, ""),
@@ -926,7 +939,8 @@ public class SettingsActivity extends Activity {
         refreshSkinRows();
         refreshPersonaRow();
         if (updBtn != null) {
-            String ut = DataStore.getString(PetService.K_UPD_TAG, "");
+            // 同样走校验接口：已装上新版就别再显示「有新版本」
+            String ut = (PetService.instance == null) ? "" : PetService.instance.pendingUpdateTag();
             updBtn.setText(Ico.s(this, ut.isEmpty() ? "🔄 检查更新" : "⬆ 有新版本 " + ut + "，点此更新"));
         }
         if (PetService.instance == null) {
@@ -1159,6 +1173,10 @@ public class SettingsActivity extends Activity {
         t.setGravity(Gravity.CENTER);
         // 边框到文字的留白收紧（原来 14/10，按钮显得太空）
         t.setPadding(dp(12), dp(6), dp(12), dp(6));
+        // 统一最小高度：输入框（EditText）系统默认最小高度接近 48dp，按钮不撑到同一高度的话，
+        // 两者并排时按钮会顶对齐、两条边框交错，看着就是「挤在一起、分不开」
+        t.setMinHeight(dp(36));
+        t.setMinimumHeight(dp(36));
         t.setBackground(box());
         return t;
     }

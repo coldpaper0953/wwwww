@@ -56,6 +56,7 @@ public class PlannerActivity extends Activity {
         c1.addView(todoList);
         LinearLayout addRow = new LinearLayout(this);
         addRow.setOrientation(LinearLayout.HORIZONTAL);
+        addRow.setGravity(Gravity.CENTER_VERTICAL);   // 两个输入框 + 「＋」按钮对齐
         final EditText tIn = input("要做什么？");
         LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         addRow.addView(tIn, lp1);
@@ -94,6 +95,7 @@ public class PlannerActivity extends Activity {
         // 喝水行
         LinearLayout wRow = new LinearLayout(this);
         wRow.setOrientation(LinearLayout.HORIZONTAL);
+        wRow.setGravity(Gravity.CENTER_VERTICAL);
         waterLabel = text("");
         LinearLayout.LayoutParams wp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f);
         wRow.addView(waterLabel, wp);
@@ -112,6 +114,7 @@ public class PlannerActivity extends Activity {
         // 新增习惯
         LinearLayout hAdd = new LinearLayout(this);
         hAdd.setOrientation(LinearLayout.HORIZONTAL);
+        hAdd.setGravity(Gravity.CENTER_VERTICAL);   // 输入框 + 「＋ 习惯」对齐
         final EditText hIn = input("新习惯名");
         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         hAdd.addView(hIn, hp);
@@ -140,6 +143,7 @@ public class PlannerActivity extends Activity {
         c3.addView(gap(6));
         LinearLayout fRow = new LinearLayout(this);
         fRow.setOrientation(LinearLayout.HORIZONTAL);
+        fRow.setGravity(Gravity.CENTER_VERTICAL);   // 分钟/目标输入框 + 「▶ 开始」对齐
         final EditText minIn = input("分钟(1-120)");
         minIn.setText("25");
         minIn.setMinWidth(dp(80));
@@ -374,6 +378,9 @@ public class PlannerActivity extends Activity {
         t.setGravity(Gravity.CENTER);
         // 边框到文字的留白收紧
         t.setPadding(dp(10), dp(5), dp(10), dp(5));
+        // 与输入框统一最小高度：否则并排时按钮顶对齐、边框交错，看着像粘在一起
+        t.setMinHeight(dp(36));
+        t.setMinimumHeight(dp(36));
         t.setBackground(box());
         return t;
     }
@@ -385,6 +392,8 @@ public class PlannerActivity extends Activity {
         e.setMaxLines(1);
         e.setTextColor(Color.parseColor("#111111"));
         e.setPadding(dp(8), dp(6), dp(8), dp(6));
+        e.setMinHeight(dp(36));      // 压掉系统默认的 48dp，和 button() 等高
+        e.setMinimumHeight(dp(36));
         e.setBackground(box());
         return e;
     }

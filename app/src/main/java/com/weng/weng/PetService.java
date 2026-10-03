@@ -393,6 +393,26 @@ public class PetService extends Service implements Flyer.Host {
         handler.post(() -> cb.onResult(hasNew, tag, notes, size, url, error));
     }
 
+    /**
+     * 读取存档里的「待更新」tag —— **读取时顺便校验一次版本**。
+     *
+     * 为什么不能直接读：用户装上新版之后，存档里那条待更新记录还留着（比如存档记的是
+     * «用户刚装上的这个版本»）。这时如果启动自检因为网络不通没跑成功，设置页的按钮就会
+     * 一直显示「有新版本，点此更新」，点进去还能下载 —— 表现就是「明明已经是最新版，还提示可更新」。
+     * 所以这里跟当前版本比一次：不比当前新就当作没有待更新，并把存档清掉。
+     */
+    public String pendingUpdateTag() {
+        String tag = DataStore.getString(K_UPD_TAG, "");
+        if (tag.isEmpty()) return "";
+        String bare = tag.startsWith(Edition.RELEASE_TAG_PREFIX)
+                ? tag.substring(Edition.RELEASE_TAG_PREFIX.length()) : tag;
+        if (verCmp(bare, curVersion()) <= 0) {
+            clearPendingUpdate();
+            return "";
+        }
+        return tag;
+    }
+
     /** 清掉存档里的「待更新」信息（已是最新、或用户更新完之后） */
     public void clearPendingUpdate() {
         DataStore.putString(K_UPD_TAG, "");

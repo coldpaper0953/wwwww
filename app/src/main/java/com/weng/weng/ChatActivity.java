@@ -49,6 +49,8 @@ public class ChatActivity extends Activity {
             btn.setTextColor(Color.parseColor("#111111"));
             btn.setGravity(Gravity.CENTER);
             btn.setPadding(dp(8), dp(5), dp(8), dp(5));   // 边框到文字的留白收紧
+            btn.setMinHeight(dp(36));
+            btn.setMinimumHeight(dp(36));
             GradientDrawable mb = new GradientDrawable();
             mb.setColor(Color.WHITE);
             mb.setCornerRadius(dp(3));
@@ -80,11 +82,15 @@ public class ChatActivity extends Activity {
         // 输入 + 发送（就一行）
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
+        // 输入框和「发送」等高、垂直居中，边框才不错位（EditText 默认最小高度接近 48dp）
+        row.setGravity(Gravity.CENTER_VERTICAL);
         final EditText in = new EditText(this);
         in.setHint("跟它说点什么…");
         in.setTextSize(14);
         in.setMaxLines(1);
         in.setTextColor(Color.parseColor("#111111"));
+        in.setMinHeight(dp(36));
+        in.setMinimumHeight(dp(36));
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         row.addView(in, ip);
         TextView send = new TextView(this);
@@ -94,6 +100,8 @@ public class ChatActivity extends Activity {
         send.setTextColor(Color.parseColor("#111111"));
         send.setGravity(Gravity.CENTER);
         send.setPadding(dp(14), dp(8), dp(14), dp(8));   // 边框到文字的留白收紧
+        send.setMinHeight(dp(36));
+        send.setMinimumHeight(dp(36));
         GradientDrawable sb = new GradientDrawable();
         sb.setColor(Color.WHITE);
         sb.setCornerRadius(dp(3));

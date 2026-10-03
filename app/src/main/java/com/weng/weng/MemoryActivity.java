@@ -312,6 +312,8 @@ public class MemoryActivity extends Activity {
     private LinearLayout row() {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL);
+        // 同一行里的控件垂直居中，高度不一致时也不会上下错位
+        r.setGravity(Gravity.CENTER_VERTICAL);
         return r;
     }
 
@@ -322,6 +324,8 @@ public class MemoryActivity extends Activity {
         e.setMaxLines(1);
         e.setTextColor(Color.parseColor("#111111"));
         e.setPadding(dp(8), dp(6), dp(8), dp(6));
+        e.setMinHeight(dp(36));      // 压掉系统默认的 48dp，和 button() 等高
+        e.setMinimumHeight(dp(36));
         e.setBackground(box());
         return e;
     }
@@ -364,6 +368,9 @@ public class MemoryActivity extends Activity {
         t.setGravity(Gravity.CENTER);
         // 边框到文字的留白收紧
         t.setPadding(dp(12), dp(5), dp(12), dp(5));
+        // 与输入框统一最小高度：否则并排时按钮顶对齐、边框交错，看着像粘在一起
+        t.setMinHeight(dp(36));
+        t.setMinimumHeight(dp(36));
         t.setBackground(box());
         return t;
     }

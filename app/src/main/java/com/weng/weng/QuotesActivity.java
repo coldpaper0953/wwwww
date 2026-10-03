@@ -86,6 +86,7 @@ public class QuotesActivity extends Activity {
             LinearLayout card = card();
             LinearLayout head = new LinearLayout(this);
             head.setOrientation(LinearLayout.HORIZONTAL);
+            head.setGravity(Gravity.CENTER_VERTICAL);   // 组名 + 「✏️」按钮垂直居中
             TextView name = new TextView(this);
             name.setText(Quotes.label(k) + "（" + all.get(k).size() + "条）");
             name.setTextSize(13);
@@ -158,6 +159,9 @@ public class QuotesActivity extends Activity {
         t.setGravity(Gravity.CENTER);
         // 边框到文字的留白收紧
         t.setPadding(dp(12), dp(5), dp(12), dp(5));
+        // 固定最小高度，和同行里的其它控件（输入框/名字）对得齐
+        t.setMinHeight(dp(36));
+        t.setMinimumHeight(dp(36));
         t.setBackground(box());
         return t;
     }
