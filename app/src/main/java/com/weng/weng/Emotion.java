@@ -152,9 +152,10 @@ public class Emotion {
         } catch (Exception ignored) {
         }
         if (sb.length() == 0) return "（还没有心情记录）";
-        String cur = "（宠物未运行）";
-        if (PetService.instance != null) cur = PetService.instance.emo.mood();
-        return sb.toString().trim() + "  当前心情：" + cur;
+        // 注意：上面循环里已经有一个 cur 了，这里换个名字，别重名
+        String curMood = "（宠物未运行）";
+        if (PetService.instance != null) curMood = PetService.instance.emo.mood();
+        return sb.toString().trim() + "  当前心情：" + curMood;
     }
 
     /** 全量重建列表（DataStore.arr 的便捷复制） */
