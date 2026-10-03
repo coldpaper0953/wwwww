@@ -10,8 +10,8 @@ android {
         applicationId "com.weng.weng"
         minSdk 24
         targetSdk 34
-        versionCode 42
-        versionName "2.11.0"
+        versionCode 43
+        versionName "2.11.1"
     }
 
     // ---- 两个版本：classic = 原版嗡嗡嗡（保持不动）；pet2 = 桌宠2.0（独立包名，可共存） ----
@@ -24,8 +24,8 @@ android {
         pet2 {
             dimension "edition"
             applicationId "com.weng.weng.pet2"
-            versionCode 3
-            versionName "2.0.2"
+            versionCode 4
+            versionName "2.0.3"
         }
     }
 

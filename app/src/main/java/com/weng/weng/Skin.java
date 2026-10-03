@@ -103,36 +103,65 @@ public class Skin {
         clear(c, key);
         int saved = 0;
         for (int i = 0; i < uris.size() && i < MAX_FRAMES; i++) {
+            Uri u = uris.get(i);
             InputStream is = null;
             FileOutputStream fos = null;
+            Bitmap bm = null, out = null;
             try {
-                is = c.getContentResolver().openInputStream(uris.get(i));
+                // ① 先只读尺寸（inJustDecodeBounds 不分配像素内存），据此算采样率。
+                //    以前是直接 decodeStream 全尺寸解码、再缩 —— 用户选一张 8000×6000 的
+                //    相册原图会瞬间申请近 200MB，直接是 OutOfMemoryError 崩掉。
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                is = c.getContentResolver().openInputStream(u);
                 if (is == null) continue;
-                Bitmap bm = BitmapFactory.decodeStream(is);
+                BitmapFactory.decodeStream(is, null, bounds);
+                closeQuietly(is);
+                is = null;
+                if (bounds.outWidth <= 0 || bounds.outHeight <= 0) continue;
+
+                int sample = 1;
+                int longest = Math.max(bounds.outWidth, bounds.outHeight);
+                while (longest / (sample * 2) >= MAX_EDGE) sample *= 2;   // 2 的幂，解码器原生支持
+
+                // ② 按采样率解码，峰值内存降到约 1/4 以下
+                BitmapFactory.Options opt = new BitmapFactory.Options();
+                opt.inSampleSize = sample;
+                is = c.getContentResolver().openInputStream(u);
+                if (is == null) continue;
+                bm = BitmapFactory.decodeStream(is, null, opt);
                 if (bm == null) continue;
-                bm = shrink(bm);
+
+                out = shrink(bm);        // 再精确缩到 MAX_EDGE
                 fos = new FileOutputStream(file(c, key, i));
-                bm.compress(Bitmap.CompressFormat.PNG, 100, fos);
+                out.compress(Bitmap.CompressFormat.PNG, 100, fos);
                 fos.flush();
                 saved++;
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
+                // 这里必须是 Throwable：OutOfMemoryError 属于 Error，catch(Exception) 抓不住，
+                // 以前一张超大图就能把整个 App 带走。
             } finally {
-                try { if (is != null) is.close(); } catch (Exception ignored) {}
-                try { if (fos != null) fos.close(); } catch (Exception ignored) {}
+                closeQuietly(fos);
+                closeQuietly(is);
+                if (out != null && out != bm && !out.isRecycled()) out.recycle();
+                if (bm != null && !bm.isRecycled()) bm.recycle();
             }
         }
         return saved;
     }
 
+    private static void closeQuietly(java.io.Closeable x) {
+        try { if (x != null) x.close(); } catch (Throwable ignored) {}
+    }
+
+    /** 缩到最长边 MAX_EDGE；回收交给调用方，避免同一张 Bitmap 被回收两次 */
     private static Bitmap shrink(Bitmap bm) {
         int max = Math.max(bm.getWidth(), bm.getHeight());
         if (max <= MAX_EDGE) return bm;
         float s = MAX_EDGE / (float) max;
         int w = Math.max(1, (int) (bm.getWidth() * s));
         int h = Math.max(1, (int) (bm.getHeight() * s));
-        Bitmap out = Bitmap.createScaledBitmap(bm, w, h, true);
-        if (out != bm) bm.recycle();
-        return out;
+        return Bitmap.createScaledBitmap(bm, w, h, true);
     }
 
     /** 恢复该动作的默认形象 */

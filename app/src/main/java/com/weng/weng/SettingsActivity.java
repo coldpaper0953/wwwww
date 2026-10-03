@@ -692,13 +692,22 @@ public class SettingsActivity extends Activity {
         pd.setCancelable(false);
         pd.show();
         PetService.instance.fetchModels((models, error) -> {
-            pd.dismiss();
+            // 拉取是网络请求（最长几十秒），这期间用户完全可能退回桌面、把设置页关掉。
+            // 对着已经销毁的 Activity 调 dismiss()/show() 会抛
+            // "View not attached to window manager" 或 BadTokenException —— 两版都会崩。
+            if (isFinishing() || isDestroyed()) return;
+            dismissQuietly(pd);
             if (error != null || models == null || models.isEmpty()) {
                 Toast.makeText(this, "拉取失败：" + (error == null ? "列表为空" : error), Toast.LENGTH_LONG).show();
                 return;
             }
             pickModelDialog(models);
         });
+    }
+
+    /** 安全关闭对话框：Activity 已销毁时 dismiss 会抛异常 */
+    private void dismissQuietly(android.app.Dialog d) {
+        try { if (d != null && d.isShowing()) d.dismiss(); } catch (Throwable ignored) {}
     }
 
     /** 模型选择弹窗：顶部搜索框实时筛选，点击条目回填到模型输入框 */
@@ -740,7 +749,7 @@ public class SettingsActivity extends Activity {
                     apiModelField.setText(m);
                     apiModelField.setSelection(m.length());
                     Toast.makeText(this, "已选择：" + m, Toast.LENGTH_SHORT).show();
-                    if (pickDlg != null) pickDlg.dismiss();
+                    dismissQuietly(pickDlg);
                 });
                 list.addView(t);
                 shown++;
@@ -843,6 +852,16 @@ public class SettingsActivity extends Activity {
     protected void onPause() {
         if (PetService.instance != null) PetService.instance.handler.removeCallbacks(uiRefresher);
         super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 页面要没了：停掉每秒刷新，并把可能还开着的对话框收干净，
+        // 免得网络回调晚一步回来时对着一堆已销毁的窗口操作。
+        if (PetService.instance != null) PetService.instance.handler.removeCallbacks(uiRefresher);
+        dismissQuietly(pickDlg);
+        pickDlg = null;
+        super.onDestroy();
     }
 
     private void refresh() {

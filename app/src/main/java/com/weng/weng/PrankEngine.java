@@ -131,7 +131,7 @@ public class PrankEngine {
         s.vy = (float) Math.sin(a) * sp;
         ImageView iv = new ImageView(h.pet().getApplicationContext());
         // 借用主宠的帧图（第一帧）；波次高时换红/紫/黑 tint
-        iv.setImageDrawable(h.pet().mosquitoDraw());
+        iv.setImageDrawable(h.pet().mosquitoDrawCopy());
         if (wave >= 2) iv.setColorFilter(redTint(wave));
         s.view = iv;
         s.lp = new WindowManager.LayoutParams(s.size, s.size,
@@ -264,7 +264,7 @@ public class PrankEngine {
         bossHp = 35;
         b.hp = bossHp;
         ImageView iv = new ImageView(h.pet().getApplicationContext());
-        iv.setImageDrawable(h.pet().mosquitoDraw());
+        iv.setImageDrawable(h.pet().mosquitoDrawCopy());
         iv.setColorFilter(new android.graphics.PorterDuffColorFilter(Color.rgb(160, 0, 0), android.graphics.PorterDuff.Mode.SRC_ATOP));
         iv.setScaleX(2f);
         iv.setScaleY(2f);
@@ -374,7 +374,7 @@ public class PrankEngine {
 
     private void finalMosquito(final TextView bsod) {
         final ImageView fin = new ImageView(h.pet().getApplicationContext());
-        fin.setImageDrawable(h.pet().mosquitoDraw());
+        fin.setImageDrawable(h.pet().mosquitoDrawCopy());
         fin.setScaleX(1.5f);
         fin.setScaleY(1.5f);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(140, 140,

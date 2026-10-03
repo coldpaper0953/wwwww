@@ -217,6 +217,10 @@ public class PetService extends Service implements Flyer.Host {
         super.onCreate();
         CrashActivity.install(this);
         sp = getSharedPreferences("weng", MODE_PRIVATE);
+        // 全局存档必须先于下面所有读取就绪：purgeDirty / Quotes / emo 都依赖它。
+        // 原来这行排在 Memory.purgeDirty() 之后，NPE 虽然被各自的 try/catch 吞了不会崩，
+        // 但「启动清洗脏记忆」会静默失效 —— 脏数据一直留在存档里。
+        DataStore.init(this);
         instance = this;
         firstAt = sp.getLong("first", 0);
         if (firstAt == 0) {
@@ -228,7 +232,6 @@ public class PetService extends Service implements Flyer.Host {
         initApi();
         Memory.purgeDirty(); // 清洗历史存档里已入库的思维链脏数据
         loadQuotes();
-        DataStore.init(this);
         DataStore.tickOverTime();   // 补算 App 没开着的那段时间（饱食度下降）
         emo.load();
         petScale = DataStore.getFloat("petScale", 1f);
@@ -408,8 +411,12 @@ public class PetService extends Service implements Flyer.Host {
 
     private Notification buildNotification() {
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-        NotificationChannel ch = new NotificationChannel("pet", getString(R.string.notif_channel), NotificationManager.IMPORTANCE_MIN);
-        nm.createNotificationChannel(ch);
+        // NotificationChannel 是 API 26 才有的类：minSdk 是 24，在 Android 7.x 上
+        // 直接 new 会 NoClassDefFoundError（下面那行 Builder 有版本判断，这里以前漏了）。
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel ch = new NotificationChannel("pet", getString(R.string.notif_channel), NotificationManager.IMPORTANCE_MIN);
+            nm.createNotificationChannel(ch);
+        }
         Notification.Builder b = android.os.Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, "pet")
                 : new Notification.Builder(this);
@@ -2003,6 +2010,23 @@ public class PetService extends Service implements Flyer.Host {
     /** 蚊群帧图来源 */
     public android.graphics.drawable.Drawable mosquitoDraw() { return cruiseF[0]; }
 
+    /**
+     * 给捣蛋鬼用的独立克隆。
+     * 主宠那张是数组里共享的 Drawable：直接交给第二个 ImageView，对方一句
+     * setColorFilter（波次越高越红）就会把主宠一起染红，移除时还会抢走 callback
+     * 让主宠不再重绘。这里克隆一份互不干扰。
+     */
+    public android.graphics.drawable.Drawable mosquitoDrawCopy() {
+        android.graphics.drawable.Drawable d = cruiseF[0];
+        if (d == null) return null;
+        try {
+            android.graphics.drawable.Drawable.ConstantState cs = d.getConstantState();
+            if (cs != null) return cs.newDrawable(getResources()).mutate();
+        } catch (Throwable ignored) {
+        }
+        return d;
+    }
+
     public void startPrank(int count) {
         if (prank == null) prank = new PrankEngine(new PrankEngine.Host() {
             @Override public WindowManager wm() { return wm; }
@@ -2510,7 +2534,7 @@ public class PetService extends Service implements Flyer.Host {
     public void onDestroy() {
         instance = null;
         handler.removeCallbacksAndMessages(null);
-        emo.save();
+        try { emo.save(); } catch (Throwable ignored) {}   // 存档失败也不能把服务销毁流程崩掉
         for (View v : new View[]{pet, bubble, tabHandle}) {
             if (v != null) try { wm.removeView(v); } catch (Exception ignored) {}
         }
