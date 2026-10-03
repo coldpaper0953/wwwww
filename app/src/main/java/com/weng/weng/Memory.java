@@ -135,6 +135,17 @@ public class Memory {
         DataStore.sp().edit().putString("userPersona", s == null ? "" : s.trim()).apply();
     }
 
+    // ================= 宠物人设（桌宠2.0 才开放自定义） =================
+
+    /** 用户自己写的宠物角色人设；空串 = 没写（用默认口吻兜底） */
+    public static String petPersona() {
+        return DataStore.sp().getString("petPersona", "");
+    }
+
+    public static void setPetPersona(String s) {
+        DataStore.sp().edit().putString("petPersona", s == null ? "" : s.trim()).apply();
+    }
+
     /** 清洗历史存档：思维链脏数据（含提示词标记/标签/无汉字的条目）+ 已废弃玩法的残留（血池），启动时静默执行 */
     public static synchronized void purgeDirty() {
         try {

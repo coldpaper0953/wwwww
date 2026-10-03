@@ -6,6 +6,9 @@ public class Edition {
     /** 是否允许用户自定义宠物形象（设置页入口是否出现） */
     public static final boolean CUSTOM_SKIN = false;
 
+    /** 是否允许用户自己写宠物人设：原版不开放，继续用内置加密人设 */
+    public static final boolean CUSTOM_PERSONA = false;
+
     /** 自更新 Release 的 tag 前缀（原版 tag 形如 v2.11.0） */
     public static final String RELEASE_TAG_PREFIX = "v";
 

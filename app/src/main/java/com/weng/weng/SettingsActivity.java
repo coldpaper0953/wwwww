@@ -15,7 +15,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** App 内设置窗口：除人设（内置加密锁定）外全部可手动编辑 */
+/** App 内设置窗口：宠物形象、人设、对话与各种玩法参数都在这里调 */
 public class SettingsActivity extends Activity {
 
     private TextView affLabel, verLabel, chatLog, speedLabel, dndBtn, affVal, workBtn;
@@ -46,6 +46,12 @@ public class SettingsActivity extends Activity {
     /** 正在等待相册返回的动作 key */
     private String pickingKey;
     private static final int REQ_SKIN = 0x5c01;
+    /** 自定义人设：状态文本（仅桌宠2.0 显示） */
+    private TextView personaRow;
+    /** 填人设输入框时用的示例 */
+    private static final String SAMPLE_PERSONA =
+            "你叫小黑，是一只住在这台手机里的黑猫。性格高冷、话少，其实很在意主人，但嘴上不肯承认。"
+                    + "喜欢待在屏幕边上看主人干活，偶尔冒出一句吐槽，每句结尾有时带个「喵」。";
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -285,12 +291,14 @@ public class SettingsActivity extends Activity {
         });
         modeRow.addView(feedBtn);
         modeRow.addView(gapW(8));
-        TextView persona = button(Edition.CUSTOM_SKIN ? "🆓 无人设版" : "🔒 人设已锁定");
-        persona.setOnClickListener(v -> Toast.makeText(this,
-                Edition.CUSTOM_SKIN
-                        ? "桌宠2.0 不带内置角色人设：AI 只按当前情景跟你聊天，不扮演固定角色"
-                        : "核心人设已内置加密保护，无法查看或修改",
-                Toast.LENGTH_LONG).show());
+        TextView persona = button(Edition.CUSTOM_PERSONA ? "🎭 人设可自定义" : "🔒 人设已锁定");
+        persona.setOnClickListener(v -> {
+            if (Edition.CUSTOM_PERSONA) {
+                personaDialog();          // 直接开编辑框，和下面的「自定义人设」卡片是同一个入口
+            } else {
+                Toast.makeText(this, "核心人设已内置加密保护，无法查看或修改", Toast.LENGTH_LONG).show();
+            }
+        });
         modeRow.addView(persona);
         petCard.addView(modeRow);
         root.addView(petCard);
@@ -340,6 +348,32 @@ public class SettingsActivity extends Activity {
             });
             skinCard.addView(resetAll);
             root.addView(skinCard);
+            root.addView(gap(10));
+        }
+
+        // ============ 自定义人设（仅桌宠2.0 出现） ============
+        if (Edition.CUSTOM_PERSONA) {
+            root.addView(cardLabel("🎭 自定义人设"));
+            LinearLayout pCard = card();
+            pCard.addView(rowLabel("写它是谁、什么性格、怎么说话。留空就回到默认的宠物口吻。"));
+            personaRow = small("#888888", Gravity.LEFT);
+            personaRow.setPadding(0, dp(2), 0, dp(6));
+            pCard.addView(personaRow);
+            LinearLayout pRow = new LinearLayout(this);
+            pRow.setOrientation(LinearLayout.HORIZONTAL);
+            TextView editP = button("✏️ 写人设");
+            editP.setOnClickListener(v -> personaDialog());
+            pRow.addView(editP);
+            pRow.addView(gapW(6));
+            TextView clearP = button("清空");
+            clearP.setOnClickListener(v -> {
+                Memory.setPetPersona("");
+                refreshPersonaRow();
+                Toast.makeText(this, "已清空，回到默认口吻", Toast.LENGTH_SHORT).show();
+            });
+            pRow.addView(clearP);
+            pCard.addView(pRow);
+            root.addView(pCard);
             root.addView(gap(10));
         }
 
@@ -629,7 +663,7 @@ public class SettingsActivity extends Activity {
         aboutCard.addView(crashBtn);
         aboutCard.addView(gap(6));
         TextView about = small("#AAAAAA", Gravity.CENTER);
-        about.setText(Edition.CUSTOM_SKIN ? "桌宠 2.0 · 无人设 · 形象可自定义" : "嗡嗡嗡手机版 · 还原版");
+        about.setText(Edition.CUSTOM_SKIN ? "桌宠 2.0 · 人设与形象都可自定义" : "嗡嗡嗡手机版 · 还原版");
         aboutCard.addView(about);
         root.addView(aboutCard);
 
@@ -814,6 +848,7 @@ public class SettingsActivity extends Activity {
     private void refresh() {
         refreshChatSettings();
         refreshSkinRows();
+        refreshPersonaRow();
         if (PetService.instance == null) {
             affLabel.setText("宠物未运行");
             return;
@@ -1123,6 +1158,85 @@ public class SettingsActivity extends Activity {
             skinRows[i].setText(n > 0 ? "已自定义 " + n + " 张" : "默认");
             skinRows[i].setTextColor(Color.parseColor(n > 0 ? "#1B7F3B" : "#888888"));
         }
+    }
+
+    // ---------------- 自定义人设（仅桌宠2.0） ----------------
+
+    /** 写宠物人设：多行输入 + 字数统计 + 一键填示例；留空 = 回到默认宠物口吻 */
+    private void personaDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(14), dp(8), dp(14), dp(4));
+
+        TextView hint = small("#888888", Gravity.LEFT);
+        hint.setTextSize(12);
+        hint.setText("写清它是谁、什么性格、怎么说话。比如：\n"
+                + "你叫小黑，一只高冷的黑猫，说话爱答不理，每句结尾加个喵。\n"
+                + "最多 " + PetService.PERSONA_MAX + " 字；留空就回到默认的宠物口吻。");
+        box.addView(hint);
+        box.addView(gap(8));
+
+        final EditText in = new EditText(this);
+        in.setMinLines(5);
+        in.setGravity(Gravity.TOP);
+        in.setTextSize(13);
+        in.setTextColor(Color.parseColor("#111111"));
+        in.setHint("你叫……");
+        in.setText(Memory.petPersona());
+        box.addView(in);
+        box.addView(gap(6));
+
+        LinearLayout cRow = new LinearLayout(this);
+        cRow.setOrientation(LinearLayout.HORIZONTAL);
+        cRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView demo = button("填入示例");
+        demo.setOnClickListener(v -> {
+            in.setText(SAMPLE_PERSONA);
+            in.setSelection(in.getText().length());
+        });
+        cRow.addView(demo);
+        cRow.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+        final TextView count = small("#999999", Gravity.END);
+        cRow.addView(count);
+        box.addView(cRow);
+
+        final Runnable upd = () -> count.setText(in.getText().toString().trim().length()
+                + " / " + PetService.PERSONA_MAX + " 字");
+        upd.run();
+        in.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) { upd.run(); }
+        });
+
+        new AlertDialog.Builder(this)
+                .setTitle("宠物人设（会拼进 AI 提示词）")
+                .setView(box)
+                .setPositiveButton("保存", (d, w) -> {
+                    String t = in.getText().toString().trim();
+                    if (t.length() > PetService.PERSONA_MAX) t = t.substring(0, PetService.PERSONA_MAX);
+                    Memory.setPetPersona(t);
+                    refreshPersonaRow();
+                    Toast.makeText(this, t.isEmpty() ? "已清空，回到默认口吻" : "已保存，下次对话就用它",
+                            Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 人设卡片的状态行 */
+    private void refreshPersonaRow() {
+        if (personaRow == null) return;
+        String p = Memory.petPersona();
+        if (p.isEmpty()) {
+            personaRow.setText("当前：默认宠物口吻（还没写人设）");
+            personaRow.setTextColor(Color.parseColor("#888888"));
+            return;
+        }
+        String one = p.replace('\n', ' ').replace('\r', ' ');
+        if (one.length() > 16) one = one.substring(0, 16) + "…";
+        personaRow.setText("当前：" + one + "（" + p.length() + " 字）");
+        personaRow.setTextColor(Color.parseColor("#1B7F3B"));
     }
 
     private int dp(float v) { return (int) (v * getResources().getDisplayMetrics().density); }
