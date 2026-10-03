@@ -29,6 +29,9 @@ public class PlannerActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         ScrollView page = new ScrollView(this);
+        // ScrollView 自己不透明化，内容不足一屏时下面会露出窗口底色（深色模式下就是黑的）
+        page.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        page.setFillViewport(true);      // 内容短时也让内容区撑满一屏
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));

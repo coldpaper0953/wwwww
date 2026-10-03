@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      App 统一主题。
+
+      为什么要自定义：原来直接用 Theme.DeviceDefault.NoActionBar，它的 windowBackground
+      在深色模式下是黑色。页面 root 是包在 ScrollView 里的 wrap_content LinearLayout，
+      内容不足一屏时 ScrollView 的透明区域就会露出这个黑色窗口底 —— 表现就是
+      「打开手账 / 记忆本 / 台词工坊，屏幕底部（或内容下面）出现一条黑色」。
+
+      这里把窗口底色固定成页面同款米色，即使某个页面某处透明也不会露黑。
+      注意：ChatActivity、TheaterActivity 在 manifest 里自带 theme，会覆盖本主题，不受影响。
+    -->
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/page_bg</item>
+        <item name="android:colorBackground">@color/page_bg</item>
+    </style>
+</resources>

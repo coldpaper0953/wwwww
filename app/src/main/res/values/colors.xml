@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 全局页面底色（与各页面 root 的 #F5F4EF 保持一致） -->
+    <color name="page_bg">#F5F4EF</color>
+</resources>

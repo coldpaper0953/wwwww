@@ -668,6 +668,9 @@ public class SettingsActivity extends Activity {
         root.addView(aboutCard);
 
         ScrollView page = new ScrollView(this);
+        // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
+        page.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        page.setFillViewport(true);
         page.addView(root);
         setContentView(page);
     }

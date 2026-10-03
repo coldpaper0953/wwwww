@@ -27,6 +27,9 @@ public class QuotesActivity extends Activity {
     protected void onCreate(Bundle b) {
         super.onCreate(b);
         ScrollView page = new ScrollView(this);
+        // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
+        page.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        page.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
