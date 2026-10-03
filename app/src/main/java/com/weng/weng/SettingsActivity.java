@@ -41,6 +41,11 @@ public class SettingsActivity extends Activity {
     private TextView standLiftVal;
     private TextView jumpModeBtn;
     private boolean chatDragging = false;
+    /** 自定义形象：每个动作一行的状态文本（仅桌宠2.0 显示） */
+    private TextView[] skinRows;
+    /** 正在等待相册返回的动作 key */
+    private String pickingKey;
+    private static final int REQ_SKIN = 0x5c01;
 
     private final Runnable uiRefresher = new Runnable() {
         @Override
@@ -61,7 +66,7 @@ public class SettingsActivity extends Activity {
         root.setBackgroundColor(Color.parseColor("#F5F4EF"));
 
         TextView title = new TextView(this);
-        title.setText("嗡嗡嗡 · 设置");
+        title.setText(getString(R.string.app_name) + " · 设置");
         title.setTextSize(24);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(Color.parseColor("#111111"));
@@ -280,13 +285,63 @@ public class SettingsActivity extends Activity {
         });
         modeRow.addView(feedBtn);
         modeRow.addView(gapW(8));
-        TextView persona = button("🔒 人设已锁定");
-        persona.setOnClickListener(v ->
-                Toast.makeText(this, "核心人设已内置加密保护，无法查看或修改", Toast.LENGTH_LONG).show());
+        TextView persona = button(Edition.CUSTOM_SKIN ? "🆓 无人设版" : "🔒 人设已锁定");
+        persona.setOnClickListener(v -> Toast.makeText(this,
+                Edition.CUSTOM_SKIN
+                        ? "桌宠2.0 不带内置角色人设：AI 只按当前情景跟你聊天，不扮演固定角色"
+                        : "核心人设已内置加密保护，无法查看或修改",
+                Toast.LENGTH_LONG).show());
         modeRow.addView(persona);
         petCard.addView(modeRow);
         root.addView(petCard);
         root.addView(gap(10));
+
+        // ============ 自定义形象（仅桌宠2.0 出现） ============
+        if (Edition.CUSTOM_SKIN) {
+            root.addView(cardLabel("🎨 自定义形象"));
+            LinearLayout skinCard = card();
+            skinCard.addView(rowLabel("从相册挑图替换宠物形象：一次可选多张（按顺序当动画帧），只选一张就是静态图。"));
+            skinRows = new TextView[Skin.KEYS.length];
+            for (int i = 0; i < Skin.KEYS.length; i++) {
+                final String key = Skin.KEYS[i];
+                LinearLayout r = new LinearLayout(this);
+                r.setOrientation(LinearLayout.HORIZONTAL);
+                r.setGravity(Gravity.CENTER_VERTICAL);
+                TextView name = new TextView(this);
+                name.setText(Skin.LABELS[i]);
+                name.setTextSize(13);
+                name.setTextColor(Color.parseColor("#111111"));
+                r.addView(name, new LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+                TextView state = small("#888888", Gravity.END);
+                skinRows[i] = state;
+                r.addView(state);
+                r.addView(gapW(6));
+                TextView pick = button("选图");
+                pick.setOnClickListener(v -> pickSkin(key));
+                r.addView(pick);
+                r.addView(gapW(6));
+                TextView def = button("默认");
+                def.setOnClickListener(v -> {
+                    Skin.clear(SettingsActivity.this, key);
+                    if (PetService.instance != null) PetService.instance.reloadFrames();
+                    refreshSkinRows();
+                });
+                r.addView(def);
+                skinCard.addView(r);
+                skinCard.addView(gap(6));
+            }
+            TextView resetAll = button("全部恢复默认形象");
+            resetAll.setOnClickListener(v -> {
+                Skin.clearAll(SettingsActivity.this);
+                if (PetService.instance != null) PetService.instance.reloadFrames();
+                refreshSkinRows();
+                Toast.makeText(this, "已恢复内置形象", Toast.LENGTH_SHORT).show();
+            });
+            skinCard.addView(resetAll);
+            root.addView(skinCard);
+            root.addView(gap(10));
+        }
 
         // ============ 语录卡片（旧5组入口保留） → 全量台词工坊 ============
         root.addView(cardLabel("🗣 台词与记忆"));
@@ -455,7 +510,7 @@ public class SettingsActivity extends Activity {
                 // 引导去系统授权"使用情况访问权限"
                 new AlertDialog.Builder(this)
                         .setTitle("App 感知说明")
-                        .setMessage("蚊子只读取「当前打开的应用名字」（不读内容）。\n\n要让它生效，请在接下来的系统页面里找到 嗡嗡嗡，允许「使用情况访问权限」。")
+                        .setMessage("蚊子只读取「当前打开的应用名字」（不读内容）。\n\n要让它生效，请在接下来的系统页面里找到 " + getString(R.string.app_name) + "，允许「使用情况访问权限」。")
                         .setPositiveButton("去授权", (d, w) -> startActivity(new Intent(
                                 android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)))
                         .setNegativeButton("取消", null)
@@ -574,7 +629,7 @@ public class SettingsActivity extends Activity {
         aboutCard.addView(crashBtn);
         aboutCard.addView(gap(6));
         TextView about = small("#AAAAAA", Gravity.CENTER);
-        about.setText("嗡嗡嗡手机版 · 还原版");
+        about.setText(Edition.CUSTOM_SKIN ? "桌宠 2.0 · 无人设 · 形象可自定义" : "嗡嗡嗡手机版 · 还原版");
         aboutCard.addView(about);
         root.addView(aboutCard);
 
@@ -758,6 +813,7 @@ public class SettingsActivity extends Activity {
 
     private void refresh() {
         refreshChatSettings();
+        refreshSkinRows();
         if (PetService.instance == null) {
             affLabel.setText("宠物未运行");
             return;
@@ -1009,6 +1065,64 @@ public class SettingsActivity extends Activity {
         View v = new View(this);
         v.setLayoutParams(new LinearLayout.LayoutParams(dp(w), 1));
         return v;
+    }
+
+    // ---------------- 自定义形象（仅桌宠2.0） ----------------
+
+    private void pickSkin(String key) {
+        pickingKey = key;
+        Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+        i.setType("image/*");
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        try {
+            startActivityForResult(Intent.createChooser(i,
+                    "选图（最多 " + Skin.MAX_FRAMES + " 张，按顺序当动画帧）"), REQ_SKIN);
+        } catch (Exception e) {
+            pickingKey = null;
+            Toast.makeText(this, "没有可用的相册/文件选择器", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req != REQ_SKIN) return;
+        String key = pickingKey;
+        pickingKey = null;
+        if (res != RESULT_OK || data == null || key == null) return;
+        java.util.List<android.net.Uri> uris = new java.util.ArrayList<android.net.Uri>();
+        android.content.ClipData cd = data.getClipData();
+        if (cd != null) {
+            for (int i = 0; i < cd.getItemCount(); i++) uris.add(cd.getItemAt(i).getUri());
+        } else if (data.getData() != null) {
+            uris.add(data.getData());
+        }
+        int n = Skin.save(this, key, uris);
+        if (n == 0) {
+            Toast.makeText(this, "图片读取失败，换张图再试试", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (PetService.instance != null) PetService.instance.reloadFrames();
+        refreshSkinRows();
+        Toast.makeText(this, "已应用 " + n + " 张图：" + labelOf(key), Toast.LENGTH_SHORT).show();
+    }
+
+    private String labelOf(String key) {
+        for (int i = 0; i < Skin.KEYS.length; i++) {
+            if (Skin.KEYS[i].equals(key)) return Skin.LABELS[i];
+        }
+        return key;
+    }
+
+    /** 每个动作显示「默认 / 已自定义 n 张」 */
+    private void refreshSkinRows() {
+        if (skinRows == null) return;
+        for (int i = 0; i < skinRows.length && i < Skin.KEYS.length; i++) {
+            int n = Skin.count(this, Skin.KEYS[i]);
+            skinRows[i].setText(n > 0 ? "已自定义 " + n + " 张" : "默认");
+            skinRows[i].setTextColor(Color.parseColor(n > 0 ? "#1B7F3B" : "#888888"));
+        }
     }
 
     private int dp(float v) { return (int) (v * getResources().getDisplayMetrics().density); }

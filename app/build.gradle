@@ -14,6 +14,21 @@ android {
         versionName "2.11.0"
     }
 
+    // ---- 两个版本：classic = 原版嗡嗡嗡（保持不动）；pet2 = 桌宠2.0（独立包名，可共存） ----
+    flavorDimensions "edition"
+    productFlavors {
+        classic {
+            dimension "edition"
+            applicationId "com.weng.weng"
+        }
+        pet2 {
+            dimension "edition"
+            applicationId "com.weng.weng.pet2"
+            versionCode 1
+            versionName "2.0.0"
+        }
+    }
+
     signingConfigs {
         weng {
             storeFile file('keystore.p12')

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">桌宠2.0</string>
+    <string name="notif_channel">桌宠2.0</string>
+    <color name="ic_launcher_background">#FFF1C9</color>
+</resources>

@@ -29,7 +29,7 @@ public class CrashActivity extends Activity {
         t.setTextColor(Color.parseColor("#FF7060"));
         t.setTextSize(11);
         t.setPadding(24, 24, 24, 24);
-        t.setText("嗡嗡嗡崩溃了！把这段截图发回去即可：\n\n" + stack);
+        t.setText(getString(R.string.app_name) + "崩溃了！把这段截图发回去即可：\n\n" + stack);
         sc.addView(t);
         setContentView(sc);
     }

@@ -22,8 +22,8 @@ public class MainActivity extends Activity {
             startPetAndOpenSettings();
         } else {
             new AlertDialog.Builder(this)
-                    .setTitle("嗡嗡嗡 needs a floating window permission")
-                    .setMessage("Just like the desktop version flies over all your windows, the little mosquito needs the \"Display over other apps\" permission to fly over your phone screen.\n\nAfter clicking OK, find 嗡嗡嗡 in the list and enable the switch, and it will automatically fly back and open the settings for you.")
+                    .setTitle(getString(R.string.app_name) + " needs a floating window permission")
+                    .setMessage("Just like the desktop version flies over all your windows, the little mosquito needs the \"Display over other apps\" permission to fly over your phone screen.\n\nAfter clicking OK, find " + getString(R.string.app_name) + " in the list and enable the switch, and it will automatically fly back and open the settings for you.")
                     .setPositiveButton("Go enable", (d, w) -> {
                         Intent i = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                 Uri.parse("package:" + getPackageName()));

@@ -23,12 +23,19 @@ jobs:
         with:
           gradle-version: '8.7'
 
-      - name: 编译 Debug APK
-        run: gradle assembleDebug --no-daemon
+      - name: 编译 Debug APK（两个版本：原版 + 桌宠2.0）
+        run: gradle assembleClassicDebug assemblePet2Debug --no-daemon
 
-      - name: 上传 APK 产物
+      - name: 上传 原版嗡嗡嗡 产物
         uses: actions/upload-artifact@v4
         with:
           name: 嗡嗡嗡手机版-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/classic/debug/app-classic-debug.apk
+          retention-days: 90
+
+      - name: 上传 桌宠2.0 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: 桌宠2.0-APK
+          path: app/build/outputs/apk/pet2/debug/app-pet2-debug.apk
           retention-days: 90
