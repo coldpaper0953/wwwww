@@ -60,12 +60,37 @@ public class Skin {
         return n;
     }
 
+    /**
+     * 解码结果缓存：key = 动作#帧号#文件大小#修改时间。
+     *
+     * 热重载（reloadFrames）会把 6 个动作最多 30 帧全部重新加载一遍，
+     * 如果每帧都重新解码一次 PNG，设置页里改一张图要卡几百毫秒；
+     * 有缓存后只有真正被换掉的那几帧需要重新解码。
+     *
+     * 存 Bitmap 而不是 Drawable：同一个 Bitmap 可以包成多个独立 Drawable 实例，
+     * 免得主宠和捣蛋鬼共用同一个 Drawable 时滤镜（金光/暴击变色）互相串台。
+     */
+    private static final java.util.HashMap<String, Bitmap> CACHE = new java.util.HashMap<String, Bitmap>();
+
+    /** 自定义目录里已经没有这张图了（换图/恢复默认），把缓存清掉 */
+    public static void clearCache() {
+        synchronized (CACHE) { CACHE.clear(); }
+    }
+
     /** 取该帧：有自定义用自定义，否则用内置兜底（fallback 可能为 null） */
     public static Drawable load(Context c, String key, int idx, Drawable fallback) {
-        if (!has(c, key, idx)) return fallback;
+        if (idx < 0 || idx >= MAX_FRAMES) return fallback;
+        File f = file(c, key, idx);
+        if (!f.exists()) return fallback;
         try {
-            Bitmap bm = BitmapFactory.decodeFile(file(c, key, idx).getAbsolutePath());
-            if (bm == null) return fallback;
+            String ck = key + "#" + idx + "#" + f.length() + "#" + f.lastModified();
+            Bitmap bm;
+            synchronized (CACHE) { bm = CACHE.get(ck); }
+            if (bm == null || bm.isRecycled()) {
+                bm = BitmapFactory.decodeFile(f.getAbsolutePath());
+                if (bm == null) return fallback;
+                synchronized (CACHE) { CACHE.put(ck, bm); }
+            }
             return new BitmapDrawable(c.getResources(), bm);
         } catch (Exception e) {
             return fallback;
@@ -116,6 +141,7 @@ public class Skin {
             File f = file(c, key, i);
             if (f.exists()) f.delete();
         }
+        clearCache();
     }
 
     public static void clearAll(Context c) {

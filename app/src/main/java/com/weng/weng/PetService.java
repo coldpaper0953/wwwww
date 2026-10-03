@@ -65,6 +65,10 @@ public class PetService extends Service implements Flyer.Host {
     private android.graphics.drawable.Drawable[] jumpF = new android.graphics.drawable.Drawable[5];
     private int frameIdx = 0, emoIdx = 0, emoLoops = 0;
 
+    // 每个动作的"有效帧数"：用户自定义了几张就播几帧（数组里不足 5 的用最后一张补满，
+    // 但播放只走前 n 帧），没自定义就是内置的 5 帧。
+    private int cruiseLen = 5, happyLen = 5, sadLen = 5, workLen = 5, jumpLen = 5;
+
     // ---- 底部演出：靠近 → 站立 → 连跳几下 → 飞走 ----
     //（勿扰模式下只有"沉到底部站着不动"，不跳也不飞）
     private long jumpUntil = 0, nextJumpAt = 0;
@@ -398,24 +402,61 @@ public class PetService extends Service implements Flyer.Host {
         workF = loadSet(Skin.WORK, "work_");
         jumpF = loadSet(Skin.JUMP, "jump_");
         deadD = loadOne(Skin.DEAD, "dead");
+
+        cruiseLen = effLen(Skin.CRUISE);
+        happyLen = effLen(Skin.HAPPY);
+        sadLen = effLen(Skin.SAD);
+        workLen = effLen(Skin.WORK);
+        jumpLen = effLen(Skin.JUMP);
     }
 
-    /** 一组 5 帧：用户自定义过就用自定义图，否则回落到内置 drawable */
+    /** 该动作实际要播几帧：自定义了 n 张就是 n 帧，没自定义就是内置 5 帧 */
+    private int effLen(String key) {
+        int n = Skin.count(this, key);
+        return (n >= 1 && n <= 5) ? n : 5;
+    }
+
+    /**
+     * 一组 5 帧。
+     *
+     * 注意：一旦用户自定义过这个动作，5 帧就**全部**用自定义图 —— 选了几张就用几张，
+     * 不够的重复最后一张补满（选 1 张 = 5 帧同一张，也就是静态图）。
+     *
+     * 这里以前是逐帧判断「这一帧有自定义就用、没有就用内置」，所以用户少于 5 张时，
+     * 自定义帧和内置蚊子帧会在 100ms 一轮的动画里交替出现 —— 看到的就是宠物「一闪一闪」。
+     */
     private android.graphics.drawable.Drawable[] loadSet(String key, String resPrefix) {
         android.graphics.drawable.Drawable[] arr = new android.graphics.drawable.Drawable[5];
-        for (int i = 1; i <= 5; i++) {
-            int rid = getResources().getIdentifier(resPrefix + i, "drawable", getPackageName());
-            android.graphics.drawable.Drawable def = rid != 0 ? getResources().getDrawable(rid) : null;
-            arr[i - 1] = Skin.load(this, key, i - 1, def);
+        int n = Skin.count(this, key);
+        if (n > 0) {
+            java.util.ArrayList<android.graphics.drawable.Drawable> mine =
+                    new java.util.ArrayList<android.graphics.drawable.Drawable>();
+            for (int i = 0; i < n; i++) {
+                android.graphics.drawable.Drawable d = Skin.load(this, key, i, null);
+                if (d != null) mine.add(d);
+            }
+            if (!mine.isEmpty()) {   // 有一个自定义帧解码失败也不回落内置，避免同组里混入内置图
+                for (int i = 0; i < 5; i++) arr[i] = mine.get(Math.min(i, mine.size() - 1));
+                return arr;
+            }
         }
+        for (int i = 1; i <= 5; i++) arr[i - 1] = builtin(resPrefix + i);
         return arr;
     }
 
-    /** 单帧（被拍扁） */
-    private android.graphics.drawable.Drawable loadOne(String key, String resName) {
+    /** 内置帧图（按资源名取，取不到给 null） */
+    private android.graphics.drawable.Drawable builtin(String resName) {
         int rid = getResources().getIdentifier(resName, "drawable", getPackageName());
-        android.graphics.drawable.Drawable def = rid != 0 ? getResources().getDrawable(rid) : null;
-        return Skin.load(this, key, 0, def);
+        return rid != 0 ? getResources().getDrawable(rid) : null;
+    }
+
+    /** 单帧（被拍扁）：同样优先自定义，且只认自定义 */
+    private android.graphics.drawable.Drawable loadOne(String key, String resName) {
+        if (Skin.count(this, key) > 0) {
+            android.graphics.drawable.Drawable d = Skin.load(this, key, 0, null);
+            if (d != null) return d;
+        }
+        return builtin(resName);
     }
 
     /** 统一设置宠物图片（自定义形象是 Drawable，不再走资源 id） */
@@ -428,8 +469,11 @@ public class PetService extends Service implements Flyer.Host {
         handler.post(() -> {
             try {
                 loadFrames();
+                frameIdx = 0;                 // 换完图从第一帧开始播，避免停在一个"半路"的帧上
+                emoIdx = 0;
                 if (dead) setPetImg(deadD != null ? deadD : cruiseF[0]);
                 else if (jumpMode || standing) setPetImg(jumpF[0] != null ? jumpF[0] : cruiseF[0]);
+                else if (workMode) setPetImg(workF[0] != null ? workF[0] : cruiseF[0]);
                 else setPetImg(cruiseF[0]);
             } catch (Exception ignored) {}
         });
@@ -878,7 +922,7 @@ public class PetService extends Service implements Flyer.Host {
                 float t = el / (float) HOP_MS;
                 float up = (t < 0.5f) ? (t / 0.5f) : (1f - t) / 0.5f;    // 前半升后半降
                 py = fromY - up * fAmp;
-                int i = Math.min(4, (int) (t * 5f));
+                int i = Math.min(jumpLen - 1, (int) (t * jumpLen));
                 if (i != lastIdx[0]) {
                     lastIdx[0] = i;
                     setPetImg(jumpF[i] != null ? jumpF[i] : cruiseF[0]);
@@ -919,7 +963,7 @@ public class PetService extends Service implements Flyer.Host {
         // 向上平移 n 再落回：前半程匀速升，后半程匀速降（就按用户说的最简单做法）
         float up = (t < 0.5f) ? (t / 0.5f) : (1f - t) / 0.5f;
         py = jumpBaseY - up * hopAmp;
-        int idx = Math.min(4, (int) (t * 5f));
+        int idx = Math.min(jumpLen - 1, (int) (t * jumpLen));
         if (idx != jumpIdx) {
             jumpIdx = idx;
             setPetImg(jumpF[idx] != null ? jumpF[idx] : cruiseF[0]);
@@ -1192,21 +1236,23 @@ public class PetService extends Service implements Flyer.Host {
             }
             if (System.currentTimeMillis() < jumpUntil || standing || jumpMode) return;   // 底部演出/jump模式期间由 tickMove 管帧
             if (playingEmo) {
+                int len = (emoSet == SET_HAPPY) ? happyLen : sadLen;
+                if (len < 1) len = 5;
                 android.graphics.drawable.Drawable[] set = (emoSet == SET_HAPPY) ? happyF : sadF;
-                setPetImg(set[emoIdx]);
+                setPetImg(set[emoIdx % len]);
                 emoIdx++;
-                if (emoIdx >= 5) {
+                if (emoIdx >= len) {
                     if (emoLoops > 0) { emoLoops--; emoIdx = 0; }
                     else playingEmo = false;
                 }
                 return;
             }
             if (workMode) {
-                frameIdx = (frameIdx + 1) % 5;
+                frameIdx = (frameIdx + 1) % workLen;
                 setPetImg(workF[frameIdx]);
                 return;
             }
-            frameIdx = (frameIdx + 1) % 5;
+            frameIdx = (frameIdx + 1) % cruiseLen;
             setPetImg(cruiseF[frameIdx]);
         }
     };
