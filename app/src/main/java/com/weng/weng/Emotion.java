@@ -52,25 +52,15 @@ public class Emotion {
         return null;
     }
 
-    /** 情绪向量（注入 AI 提示词用）：当前四维 + 近期走势，纯数字 */
+    /** 当前心情：开心/生气/孤独/兴奋 里最主导的那个，都很低就是「平静」 */
+    public String mood() {
+        String d = dominant();
+        return d == null ? "平静" : d;
+    }
+
+    /** 心情文本（界面显示 + 注入 AI 提示词）：只报当前心情，不再抛四维数字和近期走势 */
     public String describe() {
-        StringBuilder trend = new StringBuilder("[");
-        try {
-            org.json.JSONArray l = new org.json.JSONArray(DataStore.sp().getString("moodVec", "[]"));
-            int from = Math.max(0, l.length() - 5);
-            for (int i = from; i < l.length(); i++) {
-                org.json.JSONArray v = l.optJSONArray(i);
-                if (v == null || v.length() < 4) continue;
-                if (trend.length() > 1) trend.append(" → ");
-                trend.append((int) v.optDouble(0)).append(',').append((int) v.optDouble(1)).append(',')
-                        .append((int) v.optDouble(2)).append(',').append((int) v.optDouble(3));
-            }
-        } catch (Exception ignored) {
-        }
-        trend.append(']');
-        return "心情向量[开心,生气,孤独,兴奋]=" + (int) happy + "," + (int) angry + "," + (int) lonely + ","
-                + (int) excited + "，主导：" + (dominant() == null ? "平静" : dominant())
-                + "；近期走势" + trend;
+        return "当前心情：" + mood();
     }
 
     public void load() {
@@ -140,7 +130,7 @@ public class Emotion {
         return "平静";
     }
 
-    /** 走势图：向量快照的表情点阵 + 当前四维数值 */
+    /** 走势图：心情快照的表情点阵 + 当前心情 */
     public static String chart() {
         migrateMoodLog();
         StringBuilder sb = new StringBuilder();
@@ -162,13 +152,9 @@ public class Emotion {
         } catch (Exception ignored) {
         }
         if (sb.length() == 0) return "（还没有心情记录）";
-        String curVec = "（宠物未运行）";
-        if (PetService.instance != null) {
-            Emotion em = PetService.instance.emo;
-            curVec = "开心" + (int) em.happy + ",生气" + (int) em.angry + ",孤独" + (int) em.lonely
-                    + ",兴奋" + (int) em.excited;
-        }
-        return sb.toString().trim() + "  当前：" + curVec;
+        String cur = "（宠物未运行）";
+        if (PetService.instance != null) cur = PetService.instance.emo.mood();
+        return sb.toString().trim() + "  当前心情：" + cur;
     }
 
     /** 全量重建列表（DataStore.arr 的便捷复制） */

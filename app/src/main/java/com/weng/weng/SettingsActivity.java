@@ -42,6 +42,12 @@ public class SettingsActivity extends Activity {
     private TextView jumpModeBtn;
     /** 更新按钮：存档里有待更新版本时，文案会变成「有新版本 …」 */
     private TextView updBtn;
+    /** Bug 反馈 / 建议许愿的输入框与署名 */
+    private EditText fbBug, fbWish, fbName;
+    /** 反馈收件邮箱（App 里没有服务器，走系统邮件 App 发出去） */
+    private static final String FEEDBACK_MAIL = "mudaor0953@outlook.com";
+    /** 署名默认值（第一次用预填它，改过就记住新的） */
+    private static final String SIGN_DEFAULT = "cn";
     private boolean chatDragging = false;
     /** 自定义形象：每个动作一行的状态文本（仅桌宠2.0 显示） */
     private TextView[] skinRows;
@@ -253,7 +259,7 @@ public class SettingsActivity extends Activity {
         petCard.addView(affRow);
         petCard.addView(gap(8));
 
-        // 状态卡：称号/情绪/饲养
+        // 状态卡：称号/心情/饲养
         TextView statusLine = small("#555555", Gravity.LEFT);
         statusLine.setText(Ico.s(this, "❤ " + com.weng.weng.DataStore.titleFor(com.weng.weng.DataStore.getAff())
                 + " · 今日好感 " + com.weng.weng.DataStore.sp().getInt("dailyAff", 0) + "/50"));
@@ -669,6 +675,50 @@ public class SettingsActivity extends Activity {
         about.setText(Edition.CUSTOM_SKIN ? "桌宠 2.0 · 人设与形象都可自定义" : "嗡嗡嗡手机版 · 还原版");
         aboutCard.addView(about);
         root.addView(aboutCard);
+        root.addView(gap(10));
+
+        // ============ Bug 反馈 & 建议许愿（接在崩溃日志下面） ============
+        root.addView(cardLabel("💬 Bug 反馈 & 建议许愿"));
+        LinearLayout fbCard = card();
+        fbCard.addView(rowLabel("哪里不对、想要什么功能，写下来发给我。内容会自动带上版本号、机型和最近的崩溃日志。"));
+        fbCard.addView(gap(4));
+        fbCard.addView(rowLabel("🐛 Bug 反馈：哪里不对、怎么复现"));
+        fbBug = fbInput("比如：点开手账之后，屏幕底部会多出一条黑边…");
+        fbCard.addView(fbBug, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(76)));
+        fbCard.addView(gap(8));
+        fbCard.addView(rowLabel("🌠 建议 / 许愿：想要什么功能、什么玩法"));
+        fbWish = fbInput("比如：希望它能记住我昨天说过的话…");
+        fbCard.addView(fbWish, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(76)));
+        fbCard.addView(gap(8));
+        LinearLayout fbRow = new LinearLayout(this);
+        fbRow.setOrientation(LinearLayout.HORIZONTAL);
+        fbRow.setGravity(Gravity.CENTER_VERTICAL);
+        fbName = new EditText(this);
+        fbName.setHint("署名");
+        fbName.setText(DataStore.getString("fbSign", SIGN_DEFAULT));
+        fbName.setTextSize(12);
+        fbName.setMaxLines(1);
+        fbName.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
+        fbName.setTextColor(Color.parseColor("#111111"));
+        fbName.setHintTextColor(Color.parseColor("#999999"));
+        fbName.setPadding(dp(10), dp(8), dp(10), dp(8));
+        fbName.setMinHeight(dp(36));
+        fbName.setMinimumHeight(dp(36));
+        fbName.setBackground(box());
+        fbRow.addView(fbName, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        fbRow.addView(gapW(6));
+        TextView fbSend = button("📧 发送");
+        fbSend.setOnClickListener(v -> sendFeedback());
+        fbRow.addView(fbSend);
+        fbCard.addView(fbRow);
+        fbCard.addView(gap(6));
+        TextView fbTip = small("#AAAAAA", Gravity.LEFT);
+        fbTip.setText("发到 " + FEEDBACK_MAIL + "：点「发送」会先把内容复制到剪贴板兜底，再帮你打开邮件 App");
+        fbCard.addView(fbTip);
+        root.addView(fbCard);
 
         ScrollView page = new ScrollView(this);
         // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
@@ -1021,6 +1071,126 @@ public class SettingsActivity extends Activity {
                     Toast.makeText(this, "已清空", Toast.LENGTH_SHORT).show();
                 })
                 .show();
+    }
+
+    // ================= Bug 反馈 / 建议许愿 =================
+
+    /** 反馈/许愿用的多行输入框（白底细黑边，和 App 里其它输入框同款） */
+    private EditText fbInput(String hint) {
+        EditText e = new EditText(this);
+        e.setHint(hint);
+        e.setTextSize(12);
+        e.setGravity(Gravity.TOP | Gravity.LEFT);
+        e.setTextColor(Color.parseColor("#111111"));
+        e.setHintTextColor(Color.parseColor("#999999"));
+        e.setPadding(dp(10), dp(8), dp(10), dp(8));
+        e.setBackground(box());
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        e.setVerticalScrollBarEnabled(true);
+        return e;
+    }
+
+    /**
+     * 点「发送」：先把整封内容复制到剪贴板兜底（手机没配邮箱也能自己去发），
+     * 再调起邮件 App 把收件人/主题/正文填好，用户按一下发送就行。
+     * 没有邮件 App 就退到系统分享面板，再不行就只提示邮箱地址。
+     */
+    private void sendFeedback() {
+        String bug = fbBug.getText().toString().trim();
+        String wish = fbWish.getText().toString().trim();
+        String sign = fbName.getText().toString().trim();
+        if (bug.isEmpty() && wish.isEmpty()) {
+            Toast.makeText(this, "先写点内容再发吧～", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (sign.isEmpty()) sign = SIGN_DEFAULT;
+        DataStore.putString("fbSign", sign);          // 下次打开就记住这次的署名
+
+        StringBuilder sb = new StringBuilder("—— " + getString(R.string.app_name) + " · 反馈 ——\n");
+        if (!bug.isEmpty()) sb.append("\n【Bug 反馈】\n").append(bug).append('\n');
+        if (!wish.isEmpty()) sb.append("\n【建议 / 许愿】\n").append(wish).append('\n');
+        sb.append("\n【署名】").append(sign);
+        sb.append("\n【版本】v").append(appVersion());
+        sb.append("\n【包名】").append(getPackageName());
+        sb.append("\n【机型】").append(android.os.Build.MANUFACTURER).append(' ')
+                .append(android.os.Build.MODEL).append(" · Android ")
+                .append(android.os.Build.VERSION.RELEASE).append(" (API ")
+                .append(android.os.Build.VERSION.SDK_INT).append(')');
+        String log = crashLogTail(2000);
+        if (!log.isEmpty()) sb.append("\n\n【最近的崩溃日志】\n").append(log);
+        final String body = sb.toString();
+
+        copyToClipboard(body);
+
+        String subject = getString(R.string.app_name) + "反馈（" + sign + "）";
+        // mailto 太长部分邮件客户端会截断，超了就只预填前半段（完整版已进剪贴板）
+        String mailBody = body.length() > 1800
+                ? body.substring(0, 1800) + "\n…（内容较长，完整版已复制到剪贴板）" : body;
+        try {
+            Intent m = new Intent(Intent.ACTION_SENDTO);
+            m.setData(android.net.Uri.parse("mailto:" + FEEDBACK_MAIL
+                    + "?subject=" + urlEnc(subject) + "&body=" + urlEnc(mailBody)));
+            startActivity(m);
+            Toast.makeText(this, "已复制到剪贴板；在邮件里点发送就行", Toast.LENGTH_LONG).show();
+        } catch (Exception noMail) {
+            try {
+                Intent s = new Intent(Intent.ACTION_SEND);
+                s.setType("text/plain");
+                s.putExtra(Intent.EXTRA_EMAIL, new String[]{FEEDBACK_MAIL});
+                s.putExtra(Intent.EXTRA_SUBJECT, subject);
+                s.putExtra(Intent.EXTRA_TEXT, body);
+                startActivity(Intent.createChooser(s, "把反馈发出去"));
+            } catch (Exception e) {
+                Toast.makeText(this, "手机里没找到邮件 App，内容已复制，可手动发到 " + FEEDBACK_MAIL,
+                        Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private void copyToClipboard(String s) {
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                    getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+            if (cm != null) cm.setPrimaryClip(android.content.ClipData.newPlainText("反馈", s));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** mailto 的参数要自己转义（URLEncoder 会把空格编成 +，邮件客户端不认，得换回 %20） */
+    private static String urlEnc(String s) {
+        try {
+            return java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 反馈邮件里附带的崩溃日志尾部；没有日志文件就返回空串 */
+    private String crashLogTail(int max) {
+        java.io.File f = crashLogFile();
+        if (!f.exists()) return "";
+        try {
+            java.io.FileInputStream in = new java.io.FileInputStream(f);
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
+            in.close();
+            String s = bos.toString("UTF-8").trim();
+            if (s.length() > max) s = "…（只带最后 " + max + " 字）\n" + s.substring(s.length() - max);
+            return s;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String appVersion() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            return "?";
+        }
     }
 
     // ================= 主动搭话节奏 =================

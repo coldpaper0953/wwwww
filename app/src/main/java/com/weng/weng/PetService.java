@@ -2398,7 +2398,7 @@ public class PetService extends Service implements Flyer.Host {
 
     /** 注入提示词里的字段标记；回复含任一即说明模型在背诵提示词（思维链泄漏） */
     private static final String[] LEAK_MARKERS = {
-            "【长期记忆】", "【当前情景】", "【当前设备】", "【好感度】", "【情绪】",
+            "【长期记忆】", "【当前情景】", "【当前设备】", "【好感度】", "【当前心情】",
             "【饲养】", "【饲养天数】", "【当前时间】", "【今日天气】", "【前台应用】", "【用户身份】",
             "两句话以内", "口吻回应", "记忆整理器", "长期记忆条目"};
     private static final String THINK_OPEN = "<think>";
@@ -2508,7 +2508,7 @@ public class PetService extends Service implements Flyer.Host {
                     .put(new JSONObject().put("role", "system").put("content", personaPrompt()))
                     .put(new JSONObject().put("role", "user")
                             .put("content", "【当前情景】" + situation + "\n【当前设备】用户手机\n【好感度】" + DataStore.getAff()
-                                    + "（" + DataStore.titleFor(DataStore.getAff()) + "）\n【情绪】" + emo.describe()
+                                    + "（" + DataStore.titleFor(DataStore.getAff()) + "）\n【当前心情】" + emo.mood()
                                     + "\n【饲养】" + feedStatusText() + "\n【饲养天数】第 " + daysCount() + " 天"
                                     + "\n【当前时间】" + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(new Date())
                                     + "（" + timePeriod()[0] + "）"
