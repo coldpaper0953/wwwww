@@ -337,6 +337,9 @@ public class PetService extends Service implements Flyer.Host {
                 org.json.JSONArray releases = new org.json.JSONArray(bos.toString("UTF-8"));
                 String foundTag = "", foundUrl = null, foundNotes = "";
                 long foundSize = 0;
+                // GitHub 的 Release 列表按发布时间返回，并不保证版本号从高到低。
+                // 例如 pet2-v2.0.9 可能排在 pet2-v2.0.10 前面，不能遇到第一个匹配项就停止；
+                // 必须遍历全部同前缀 Release，选择版本号最高且带 APK 的那一个。
                 for (int r = 0; r < releases.length(); r++) {
                     JSONObject j = releases.getJSONObject(r);
                     if (j.optBoolean("draft") || j.optBoolean("prerelease")) continue;
@@ -344,17 +347,28 @@ public class PetService extends Service implements Flyer.Host {
                     if (!t.startsWith(Edition.RELEASE_TAG_PREFIX)) continue;
                     org.json.JSONArray assets = j.optJSONArray("assets");
                     if (assets == null) continue;
+
+                    String candidateUrl = null;
+                    long candidateSize = 0;
                     for (int i = 0; i < assets.length(); i++) {
                         JSONObject a = assets.getJSONObject(i);
                         if (a.optString("name", "").endsWith(".apk")) {
-                            foundUrl = a.optString("browser_download_url");
-                            foundTag = t;
-                            foundNotes = j.optString("body", "");   // Release 正文＝本次更新内容
-                            foundSize = a.optLong("size", 0);
+                            candidateUrl = a.optString("browser_download_url");
+                            candidateSize = a.optLong("size", 0);
                             break;
                         }
                     }
-                    if (foundUrl != null) break;
+                    if (candidateUrl == null || candidateUrl.isEmpty()) continue;
+
+                    String candidateBare = t.substring(Edition.RELEASE_TAG_PREFIX.length());
+                    String foundBare = foundTag.isEmpty() ? "0" :
+                            foundTag.substring(Edition.RELEASE_TAG_PREFIX.length());
+                    if (foundTag.isEmpty() || verCmp(candidateBare, foundBare) > 0) {
+                        foundUrl = candidateUrl;
+                        foundTag = t;
+                        foundNotes = j.optString("body", "");   // Release 正文＝本次更新内容
+                        foundSize = candidateSize;
+                    }
                 }
                 final String tag = foundTag, notes = foundNotes;
                 final long size = foundSize;
