@@ -44,6 +44,9 @@ public class SettingsActivity extends Activity {
     private TextView updBtn;
     /** Bug 反馈 / 建议许愿的输入框与署名 */
     private EditText fbBug, fbWish, fbName;
+    /** 反馈/许愿折叠区的标题（点击展开/收起）与内容容器 */
+    private TextView fbFoldTitle;
+    private LinearLayout fbFoldBody;
     /** 反馈收件邮箱（App 里没有服务器，走系统邮件 App 发出去） */
     private static final String FEEDBACK_MAIL = "mudaor0953@outlook.com";
     /** 署名默认值（第一次用预填它，改过就记住新的） */
@@ -677,8 +680,15 @@ public class SettingsActivity extends Activity {
         root.addView(aboutCard);
         root.addView(gap(10));
 
-        // ============ Bug 反馈 & 建议许愿（接在崩溃日志下面） ============
-        root.addView(cardLabel("💬 Bug 反馈 & 建议许愿"));
+        // ============ Bug 反馈 & 建议许愿（接在崩溃日志下面，折叠栏） ============
+        fbFoldTitle = new TextView(this);
+        fbFoldTitle.setText(Ico.s(this, "▶ 💬 Bug 反馈 & 建议许愿"));
+        fbFoldTitle.setTextSize(13);
+        fbFoldTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        fbFoldTitle.setTextColor(Color.parseColor("#666666"));
+        fbFoldTitle.setPadding(dp(4), dp(6), 0, dp(6));
+        root.addView(fbFoldTitle);
+
         LinearLayout fbCard = card();
         fbCard.addView(rowLabel("哪里不对、想要什么功能，写下来发给我。内容会自动带上版本号、机型和最近的崩溃日志。"));
         fbCard.addView(gap(4));
@@ -718,7 +728,11 @@ public class SettingsActivity extends Activity {
         TextView fbTip = small("#AAAAAA", Gravity.LEFT);
         fbTip.setText("发到 " + FEEDBACK_MAIL + "：点「发送」会先把内容复制到剪贴板兜底，再帮你打开邮件 App");
         fbCard.addView(fbTip);
-        root.addView(fbCard);
+
+        fbFoldBody = fbCard;
+        fbFoldBody.setVisibility(View.GONE);   // 默认收起
+        root.addView(fbFoldBody);
+        fbFoldTitle.setOnClickListener(v -> toggleFeedbackFold());
 
         ScrollView page = new ScrollView(this);
         // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
@@ -1074,6 +1088,13 @@ public class SettingsActivity extends Activity {
     }
 
     // ================= Bug 反馈 / 建议许愿 =================
+
+    /** 折叠栏：点标题展开/收起反馈与许愿区，箭头跟着切换 ▶/▼ */
+    private void toggleFeedbackFold() {
+        boolean show = fbFoldBody.getVisibility() != View.VISIBLE;
+        fbFoldBody.setVisibility(show ? View.VISIBLE : View.GONE);
+        fbFoldTitle.setText(Ico.s(this, (show ? "▼" : "▶") + " 💬 Bug 反馈 & 建议许愿"));
+    }
 
     /** 反馈/许愿用的多行输入框（白底细黑边，和 App 里其它输入框同款） */
     private EditText fbInput(String hint) {
