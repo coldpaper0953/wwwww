@@ -485,13 +485,32 @@ public class SettingsActivity extends Activity {
         LinearLayout exCard = card();
         LinearLayout exRow = new LinearLayout(this);
         exRow.setOrientation(LinearLayout.HORIZONTAL);
-        TextView fortune = button("🔮 今日运势");
+        TextView fortune = button("🔮 随机运势");
         fortune.setOnClickListener(v ->
                 new AlertDialog.Builder(this, R.style.AppDialog).setTitle(Ico.s(this, "🔮 今日运势"))
                         .setMessage(Ico.s(this, com.weng.weng.Extras.fortune()))
                         .setPositiveButton("关闭", null).show());
         exRow.addView(fortune);
-        exRow.addView(gapW(8));
+        exRow.addView(gapW(6));
+        TextView aiFortune = button("🤖 AI 运势");
+        aiFortune.setOnClickListener(v -> {
+            if (PetService.instance != null && PetService.instance.apiBase != null
+                    && !PetService.instance.apiBase.trim().isEmpty()
+                    && PetService.instance.apiKey != null && !PetService.instance.apiKey.trim().isEmpty()) {
+                PetService.instance.aiChat("用户想让你帮他看看今天的运势（"
+                        + new java.text.SimpleDateFormat("yyyy年M月d日", java.util.Locale.US).format(new java.util.Date()) + "），"
+                        + "请用人设风格预测一下他今天的运势，用简短的一两句话说就好");
+                Toast.makeText(this, "已发送给宠物，它正在想…", Toast.LENGTH_SHORT).show();
+            } else {
+                // 没配 API → 退回本地随机
+                new AlertDialog.Builder(this, R.style.AppDialog).setTitle(Ico.s(this, "🔮 今日运势（随机）"))
+                        .setMessage(Ico.s(this, "⚠ 未配置 AI 接口，使用随机运势。\n\n"
+                                + com.weng.weng.Extras.fortune()))
+                        .setPositiveButton("关闭", null).show();
+            }
+        });
+        exRow.addView(aiFortune);
+        exRow.addView(gapW(6));
         TextView guide = button("📖 饲养指南");
         guide.setOnClickListener(v ->
                 new AlertDialog.Builder(this, R.style.AppDialog).setTitle("📖 饲养指南")
