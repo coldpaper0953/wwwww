@@ -100,6 +100,7 @@ public class SettingsActivity extends Activity {
         root.addView(gap(10));
 
         // ============ 聊天卡片 ============
+        root.addView(sectionLabel("💬 交流与日常"));
         root.addView(cardLabel("💬 聊天"));
         LinearLayout chatCard = card();
         chatLog = new TextView(this);
@@ -148,6 +149,7 @@ public class SettingsActivity extends Activity {
         root.addView(gap(10));
 
         // ============ 宠物设置卡片 ============
+        root.addView(sectionLabel("🐝 宠物与形象"));
         root.addView(cardLabel("🐝 宠物设置"));
         LinearLayout petCard = card();
 
@@ -308,7 +310,8 @@ public class SettingsActivity extends Activity {
             }
         });
         modeRow.addView(feedBtn);
-        modeRow.addView(gapW(8));
+        petCard.addView(modeRow);
+        petCard.addView(gap(6));
         TextView persona = button(Edition.CUSTOM_PERSONA ? "🎭 人设可自定义" : "🔒 人设已锁定");
         persona.setOnClickListener(v -> {
             if (Edition.CUSTOM_PERSONA) {
@@ -317,8 +320,7 @@ public class SettingsActivity extends Activity {
                 Toast.makeText(this, "核心人设已内置加密保护，无法查看或修改", Toast.LENGTH_LONG).show();
             }
         });
-        modeRow.addView(persona);
-        petCard.addView(modeRow);
+        petCard.addView(persona);
         root.addView(petCard);
         root.addView(gap(10));
 
@@ -396,18 +398,17 @@ public class SettingsActivity extends Activity {
         }
 
         // ============ 语录卡片（旧5组入口保留） → 全量台词工坊 ============
+        root.addView(sectionLabel("🗣 台词与 AI"));
         root.addView(cardLabel("🗣 台词与记忆"));
         LinearLayout qCard = card();
-        LinearLayout qRow = new LinearLayout(this);
-        qRow.setOrientation(LinearLayout.HORIZONTAL);
+        // 两个入口各占一行：台词工坊文案较长，和记忆本并排会在窄屏被挤到卡边
         TextView quotesAll = button("🗣 台词工坊（全部台词含教程）");
         quotesAll.setOnClickListener(v -> startActivity(new Intent(this, QuotesActivity.class)));
-        qRow.addView(quotesAll);
-        qRow.addView(gapW(6));
+        qCard.addView(quotesAll);
+        qCard.addView(gap(6));
         TextView memBtn = button("🧠 记忆本");
         memBtn.setOnClickListener(v -> startActivity(new Intent(this, MemoryActivity.class)));
-        qRow.addView(memBtn);
-        qCard.addView(qRow);
+        qCard.addView(memBtn);
         qCard.addView(gap(6));
         TextView qHint = small("#999999", Gravity.LEFT);
         qHint.setText("台词工坊里可改：戳/扔/复活/时段问候/主动搭话题/小剧场/伪造报错/App吐槽/新手教程等全部文案；记忆本里可看 AI 的记忆、设副 API 和你的身份。");
@@ -433,15 +434,14 @@ public class SettingsActivity extends Activity {
         apiHelpRow.addView(helpBtn);
         apiCard.addView(apiHelpRow);
         apiCard.addView(gap(8));
-        // 预设行：显示当前预设 + 存为预设 + 切换预设（多个 API 配置一键切换）
+        // 预设区：第一行显示当前预设名，第二行放「存为预设 / 切换」两个按钮（分开两行，避免窄屏把标签挤没）
         LinearLayout presetRow = new LinearLayout(this);
         presetRow.setOrientation(LinearLayout.HORIZONTAL);
         presetRow.setGravity(Gravity.CENTER_VERTICAL);
         presetLabel = small("#666666", Gravity.LEFT);
         presetLabel.setText("预设：" + currentPresetName());
-        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        presetRow.addView(presetLabel, plp);
-        presetRow.addView(gapW(6));
+        apiCard.addView(presetLabel);
+        apiCard.addView(gap(6));
         TextView savePresetBtn = button("📌 存为预设");
         savePresetBtn.setOnClickListener(v -> saveAsPreset());
         presetRow.addView(savePresetBtn);
@@ -478,6 +478,7 @@ public class SettingsActivity extends Activity {
         root.addView(gap(10));
 
         // ============ 整蛊模式卡片 ============
+        root.addView(sectionLabel("🎮 玩法与感知"));
         root.addView(cardLabel("🦟 整蛊模式（和电脑版一样的蚊群拍打游戏）"));
         LinearLayout prankCard = card();
         LinearLayout pRow = new LinearLayout(this);
@@ -545,27 +546,27 @@ public class SettingsActivity extends Activity {
             }
         });
         exRow.addView(aiFortune);
-        exRow.addView(gapW(6));
+        exCard.addView(exRow);
+        exCard.addView(gap(6));
+        LinearLayout exRow2 = new LinearLayout(this);
+        exRow2.setOrientation(LinearLayout.HORIZONTAL);
         TextView guide = button("📖 饲养指南");
         guide.setOnClickListener(v ->
                 new AlertDialog.Builder(this, R.style.AppDialog).setTitle("📖 饲养指南")
                         .setMessage(com.weng.weng.Extras.guideText()).setPositiveButton("懂了", null).show());
-        exRow.addView(guide);
-        exCard.addView(exRow);
-        exCard.addView(gap(8));
-        LinearLayout exRow2 = new LinearLayout(this);
-        exRow2.setOrientation(LinearLayout.HORIZONTAL);
+        exRow2.addView(guide);
+        exRow2.addView(gapW(6));
         TextView ach = button("🏆 成就/回忆录");
         ach.setOnClickListener(v -> showAchievements());
         exRow2.addView(ach);
-        exRow2.addView(gapW(8));
+        exCard.addView(exRow2);
+        exCard.addView(gap(6));
         TextView resetTut = button("🔁 重置教程");
         resetTut.setOnClickListener(v -> {
             com.weng.weng.DataStore.putBool("tutorialDone", false);
             Toast.makeText(this, "下次启动会重新播放教程", Toast.LENGTH_SHORT).show();
         });
-        exRow2.addView(resetTut);
-        exCard.addView(exRow2);
+        exCard.addView(resetTut);
         root.addView(exCard);
         root.addView(gap(10));
 
@@ -595,9 +596,7 @@ public class SettingsActivity extends Activity {
         ixCard.addView(glideRow);
         ixCard.addView(gap(8));
 
-        // 拉手开关
-        LinearLayout tabRow = new LinearLayout(this);
-        tabRow.setOrientation(LinearLayout.HORIZONTAL);
+        // 拉手开关（两个开关各占一行：App感知的文案会带「当前应用名」变长，并排会把邻居挤出边框）
         tabBtn = button("💬 屏幕拉手：开");
         tabBtn.setOnClickListener(v -> {
             if (PetService.instance == null) return;
@@ -605,8 +604,8 @@ public class SettingsActivity extends Activity {
             PetService.instance.setTabHandleVisible(on);
             refresh();
         });
-        tabRow.addView(tabBtn);
-        tabRow.addView(gapW(8));
+        ixCard.addView(tabBtn);
+        ixCard.addView(gap(6));
         senseBtn = button("👁 App感知：?");
         senseBtn.setOnClickListener(v -> {
             boolean on = !com.weng.weng.DataStore.getBool("appSense", true);
@@ -623,8 +622,7 @@ public class SettingsActivity extends Activity {
             }
             refresh();
         });
-        tabRow.addView(senseBtn);
-        ixCard.addView(tabRow);
+        ixCard.addView(senseBtn);
         ixCard.addView(gap(6));
         // jump 模式（也可以在屏幕右缘拉手里快捷切换）
         jumpModeBtn = button("🏃 jump模式：关");
@@ -697,14 +695,16 @@ public class SettingsActivity extends Activity {
         root.addView(gap(10));
 
         // ============ 更新与关于卡片 ============
+        root.addView(sectionLabel("⚙️ 系统与支持"));
         root.addView(cardLabel("⚙️ 更新与关于"));
         LinearLayout aboutCard = card();
-        LinearLayout aboutRow = new LinearLayout(this);
-        aboutRow.setOrientation(LinearLayout.HORIZONTAL);
+        // 检查更新单独一行：文案会变成「⬆ 有新版本 vX，点此更新」，和别的按钮并排会被挤出边框
         updBtn = button("🔄 检查更新");
         updBtn.setOnClickListener(v -> onCheckUpdateClicked());
-        aboutRow.addView(updBtn);
-        aboutRow.addView(gapW(8));
+        aboutCard.addView(updBtn);
+        aboutCard.addView(gap(6));
+        LinearLayout bootQuitRow = new LinearLayout(this);
+        bootQuitRow.setOrientation(LinearLayout.HORIZONTAL);
         TextView bootBtn = button("📲 开机自启：关");
         bootBtn.setOnClickListener(v -> {
             boolean on = !com.weng.weng.DataStore.getBool("bootAuto", false);
@@ -713,15 +713,15 @@ public class SettingsActivity extends Activity {
             Toast.makeText(this, on ? "已开启（重启后生效）" : "已关闭", Toast.LENGTH_SHORT).show();
         });
         if (com.weng.weng.DataStore.getBool("bootAuto", false)) bootBtn.setText(Ico.s(this, "📲 开机自启：开"));
-        aboutRow.addView(bootBtn);
-        aboutRow.addView(gapW(8));
+        bootQuitRow.addView(bootBtn);
+        bootQuitRow.addView(gapW(8));
         TextView quit = button("✖ 退出");
         quit.setOnClickListener(v -> {
             if (PetService.instance != null) PetService.instance.stopSelf();
             finish();
         });
-        aboutRow.addView(quit);
-        aboutCard.addView(aboutRow);
+        bootQuitRow.addView(quit);
+        aboutCard.addView(bootQuitRow);
         aboutCard.addView(gap(6));
         // 崩溃日志查看器：Android 11+ 的 Android/data 没法用文件管理器浏览，只能在 App 内看
         TextView crashBtn = button("⚠ 崩溃日志");
@@ -1604,6 +1604,17 @@ public class SettingsActivity extends Activity {
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextColor(Color.parseColor("#666666"));
         t.setPadding(dp(4), 0, 0, dp(4));
+        return t;
+    }
+
+    /** 大组标题：把零散的卡片按用途归成几大类，避免一屏全是卡片、一眼找不到要改的项 */
+    private TextView sectionLabel(String text) {
+        TextView t = new TextView(this);
+        t.setText(Ico.s(this, text));
+        t.setTextSize(15);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextColor(Color.parseColor("#111111"));
+        t.setPadding(dp(4), dp(16), 0, dp(8));
         return t;
     }
 
