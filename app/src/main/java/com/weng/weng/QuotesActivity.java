@@ -28,17 +28,17 @@ public class QuotesActivity extends Activity {
         super.onCreate(b);
         ScrollView page = new ScrollView(this);
         // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
-        page.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        page.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.setFillViewport(true);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        root.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.addView(root);
         setContentView(page);
 
         TextView title = new TextView(this);
-        title.setText("🗣 台词工坊（改了立即生效）");
+        title.setText(Ico.s(this, "🗣 台词工坊（改了立即生效）"));
         title.setTextSize(20);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(Color.parseColor("#111111"));
@@ -171,9 +171,8 @@ public class QuotesActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(12), dp(10), dp(12), dp(10));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setColor(Color.parseColor("#F7F7F7"));
+        g.setCornerRadius(dp(8));
         c.setBackground(g);
         return c;
     }
@@ -181,8 +180,8 @@ public class QuotesActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(8));
+        g.setStroke(dp(1), Color.parseColor("#E5E5E5"));
         return g;
     }
 

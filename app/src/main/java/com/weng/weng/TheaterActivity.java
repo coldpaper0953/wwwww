@@ -28,7 +28,7 @@ public class TheaterActivity extends Activity {
         root.setGravity(Gravity.CENTER);
         root.setPadding(dp(28), dp(28), dp(28), dp(28));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(0xE6F5F4EF);
+        bg.setColor(0xE6FFFFFF);
         root.setBackground(bg);
 
         TextView title = new TextView(this);
@@ -91,8 +91,8 @@ public class TheaterActivity extends Activity {
         t.setPadding(dp(16), dp(14), dp(16), dp(14));
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(8));
+        g.setStroke(dp(1), Color.parseColor("#E5E5E5"));
         t.setBackground(g);
         return t;
     }

@@ -134,6 +134,16 @@ public class Ico {
         MAP.put("⏹", "ic_stop");
         MAP.put("⏹️", "ic_stop");
         MAP.put("✓", "ic_checkbold");
+        // ---- 补齐漏网 emoji（纯白 ins 风：统一细线条矢量图标）----
+        MAP.put("❓", "ic_helpcircleoutline");
+        MAP.put("⬆", "ic_arrowupbold");
+        MAP.put("⬆️", "ic_arrowupbold");
+        MAP.put("🌠", "ic_starshootingoutline");
+        MAP.put("🎨", "ic_paletteoutline");
+        MAP.put("🐛", "ic_bug");
+        MAP.put("📌", "ic_pinoutline");
+        MAP.put("📧", "ic_emailoutline");
+        MAP.put("🤖", "ic_robotoutline");
     }
 
     /** emoji 串（按长度降序拼正则，防部分匹配） */

@@ -30,17 +30,17 @@ public class PlannerActivity extends Activity {
         super.onCreate(b);
         ScrollView page = new ScrollView(this);
         // ScrollView 自己不透明化，内容不足一屏时下面会露出窗口底色（深色模式下就是黑的）
-        page.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        page.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.setFillViewport(true);      // 内容短时也让内容区撑满一屏
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        root.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.addView(root);
         setContentView(page);
 
         TextView title = new TextView(this);
-        title.setText("📝 我的手账");
+        title.setText(Ico.s(this, "📝 我的手账"));
         title.setTextSize(22);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setTextColor(Color.parseColor("#111111"));
@@ -310,16 +310,16 @@ public class PlannerActivity extends Activity {
             habitList.addView(r);
             habitList.addView(gap(4));
         }
-        waterLabel.setText("💧 今日喝水 " + Planner.waterToday() + "/8 杯");
+        waterLabel.setText(Ico.s(this, "💧 今日喝水 " + Planner.waterToday() + "/8 杯"));
         // ---- 专注 ----
         org.json.JSONObject f = Planner.focus();
         if (f.optBoolean("active", false)) {
             boolean paused = f.optLong("pausedAt", 0) > 0;
-            focusLabel.setText("🍅 " + Planner.focusText() + "　目标：" + f.optString("goal", "—"));
-            focusBtnText.setText(paused ? "▶ 继续" : "⏸ 暂停");
+            focusLabel.setText(Ico.s(this, "🍅 " + Planner.focusText() + "　目标：" + f.optString("goal", "—")));
+            focusBtnText.setText(Ico.s(this, paused ? "▶ 继续" : "⏸ 暂停"));
         } else {
             focusLabel.setText("选好时长，开始专注吧～");
-            focusBtnText.setText("▶ 开始");
+            focusBtnText.setText(Ico.s(this, "▶ 开始"));
         }
         // 手账催办
         int open = Planner.openCount();
@@ -362,9 +362,8 @@ public class PlannerActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setColor(Color.parseColor("#F7F7F7"));
+        g.setCornerRadius(dp(8));
         c.setBackground(g);
         return c;
     }
@@ -401,8 +400,8 @@ public class PlannerActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(8));
+        g.setStroke(dp(1), Color.parseColor("#E5E5E5"));
         return g;
     }
 

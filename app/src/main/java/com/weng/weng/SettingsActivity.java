@@ -86,7 +86,7 @@ public class SettingsActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
-        root.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        root.setBackgroundColor(Color.parseColor("#FFFFFF"));
 
         TextView title = new TextView(this);
         title.setText(getString(R.string.app_name) + " · 设置");
@@ -106,9 +106,8 @@ public class SettingsActivity extends Activity {
         LinearLayout tabBar = new LinearLayout(this);
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         GradientDrawable tabBg = new GradientDrawable();
-        tabBg.setColor(Color.WHITE);
-        tabBg.setCornerRadius(dp(3));
-        tabBg.setStroke(dp(1), Color.parseColor("#111111"));
+        tabBg.setColor(Color.parseColor("#F7F7F7"));
+        tabBg.setCornerRadius(dp(8));
         tabBar.setBackground(tabBg);
         String[] tabNames = {"交流", "宠物", "台词·AI", "玩法", "系统"};
         for (int i = 0; i < 5; i++) {
@@ -588,8 +587,8 @@ public class SettingsActivity extends Activity {
         exRow2.setOrientation(LinearLayout.HORIZONTAL);
         TextView guide = button("📖 饲养指南");
         guide.setOnClickListener(v ->
-                new AlertDialog.Builder(this, R.style.AppDialog).setTitle("📖 饲养指南")
-                        .setMessage(com.weng.weng.Extras.guideText()).setPositiveButton("懂了", null).show());
+                new AlertDialog.Builder(this, R.style.AppDialog).setTitle(Ico.s(this, "📖 饲养指南"))
+                        .setMessage(Ico.s(this, com.weng.weng.Extras.guideText())).setPositiveButton("懂了", null).show());
         exRow2.addView(guide);
         exRow2.addView(gapW(6));
         TextView ach = button("🏆 成就/回忆录");
@@ -826,7 +825,7 @@ public class SettingsActivity extends Activity {
 
         ScrollView page = new ScrollView(this);
         // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
-        page.setBackgroundColor(Color.parseColor("#F5F4EF"));
+        page.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.setFillViewport(true);
         page.addView(root);
         setContentView(page);
@@ -1161,7 +1160,7 @@ public class SettingsActivity extends Activity {
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
         pickDlg = new AlertDialog.Builder(this, R.style.AppDialog)
-                .setTitle("📡 选择模型（共 " + models.size() + " 个）")
+                .setTitle(Ico.s(this, "📡 选择模型（共 " + models.size() + " 个）"))
                 .setView(box)
                 .setNegativeButton("取消", null)
                 .show();
@@ -1201,7 +1200,7 @@ public class SettingsActivity extends Activity {
             }
         }
         sb.append("\n—— 心情走势 ——\n").append(com.weng.weng.Emotion.chart());
-        new AlertDialog.Builder(this, R.style.AppDialog).setTitle("🏆 成就与回忆").setMessage(sb.toString())
+        new AlertDialog.Builder(this, R.style.AppDialog).setTitle(Ico.s(this, "🏆 成就与回忆")).setMessage(Ico.s(this, sb.toString()))
                 .setPositiveButton("关闭", null).show();
     }
 
@@ -1602,9 +1601,8 @@ public class SettingsActivity extends Activity {
         satBar = new LinearLayout(this);
         satBar.setOrientation(LinearLayout.HORIZONTAL);
         GradientDrawable track = new GradientDrawable();
-        track.setColor(Color.parseColor("#EDEBE3"));
-        track.setCornerRadius(dp(3));
-        track.setStroke(dp(1), Color.parseColor("#111111"));
+        track.setColor(Color.parseColor("#F0F0F0"));
+        track.setCornerRadius(dp(8));
         satBar.setBackground(track);
         int pad = dp(2);
         satBar.setPadding(pad, pad, pad, pad);
@@ -1631,7 +1629,7 @@ public class SettingsActivity extends Activity {
         int col = sat < 15f ? 0xFFE24B4A : (sat < 35f ? 0xFFEF9F27 : 0xFF639922);
         GradientDrawable fillBg = new GradientDrawable();
         fillBg.setColor(col);
-        fillBg.setCornerRadius(dp(3));
+        fillBg.setCornerRadius(dp(8));
         satFill.setBackground(fillBg);
 
         float rest = 100f - sat;
@@ -1672,16 +1670,15 @@ public class SettingsActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setColor(Color.parseColor("#F7F7F7"));
+        g.setCornerRadius(dp(8));
         c.setBackground(g);
         return c;
     }
 
     private TextView rowLabel(String text) {
         TextView t = new TextView(this);
-        t.setText(text);
+        t.setText(Ico.s(this, text));
         t.setTextSize(12);
         t.setTextColor(Color.parseColor("#777777"));
         t.setPadding(0, dp(4), 0, dp(2));
@@ -1708,8 +1705,8 @@ public class SettingsActivity extends Activity {
     private GradientDrawable box() {
         GradientDrawable g = new GradientDrawable();
         g.setColor(Color.WHITE);
-        g.setCornerRadius(dp(3));
-        g.setStroke(dp(1), Color.parseColor("#111111"));
+        g.setCornerRadius(dp(8));
+        g.setStroke(dp(1), Color.parseColor("#E5E5E5"));
         return g;
     }
 

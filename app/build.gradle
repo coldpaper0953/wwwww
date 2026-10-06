@@ -24,8 +24,8 @@ android {
         pet2 {
             dimension "edition"
             applicationId "com.weng.weng.pet2"
-            versionCode 17
-            versionName "2.0.16"
+            versionCode 18
+            versionName "2.0.17"
         }
     }
 

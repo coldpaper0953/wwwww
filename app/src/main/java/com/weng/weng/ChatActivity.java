@@ -22,9 +22,9 @@ public class ChatActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(10), dp(10), dp(10), dp(10));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#F2FFFFFF"));
-        bg.setCornerRadius(dp(3));
-        bg.setStroke(dp(1), Color.parseColor("#111111"));
+        bg.setColor(Color.parseColor("#FFFFFF"));
+        bg.setCornerRadius(dp(8));
+        bg.setStroke(dp(1), Color.parseColor("#E5E5E5"));
         root.setBackground(bg);
 
         // 顶栏：时段 + 当前 App 名
@@ -53,8 +53,8 @@ public class ChatActivity extends Activity {
             btn.setMinimumHeight(dp(36));
             GradientDrawable mb = new GradientDrawable();
             mb.setColor(Color.WHITE);
-            mb.setCornerRadius(dp(3));
-            mb.setStroke(dp(1), Color.parseColor("#111111"));
+            mb.setCornerRadius(dp(8));
+            mb.setStroke(dp(1), Color.parseColor("#E5E5E5"));
             btn.setBackground(mb);
             btn.setOnClickListener(v -> {
                 if (PetService.instance == null) return;
@@ -104,8 +104,8 @@ public class ChatActivity extends Activity {
         send.setMinimumHeight(dp(36));
         GradientDrawable sb = new GradientDrawable();
         sb.setColor(Color.WHITE);
-        sb.setCornerRadius(dp(3));
-        sb.setStroke(dp(1), Color.parseColor("#111111"));
+        sb.setCornerRadius(dp(8));
+        sb.setStroke(dp(1), Color.parseColor("#E5E5E5"));
         send.setBackground(sb);
         send.setOnClickListener(v -> {
             String s = in.getText().toString().trim();
