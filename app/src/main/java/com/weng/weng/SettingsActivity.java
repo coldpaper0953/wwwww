@@ -416,7 +416,21 @@ public class SettingsActivity extends Activity {
         // ============ API 卡片 ============
         root.addView(cardLabel("🔌 AI 接口（可换服务商）"));
         LinearLayout apiCard = card();
-        apiBaseField = apiInput("接口地址：填 https://api.xxx.com/v1 即可（v2/v3/本地http端口均可，自动补全）",
+        // 新手指导：一行提示 + 教程按钮
+        LinearLayout apiHelpRow = new LinearLayout(this);
+        apiHelpRow.setOrientation(LinearLayout.HORIZONTAL);
+        apiHelpRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView apiHelp = small("#999999", Gravity.LEFT);
+        apiHelp.setText("第一次配置？看教程照着填，三步就好");
+        LinearLayout.LayoutParams ahp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        apiHelpRow.addView(apiHelp, ahp);
+        apiHelpRow.addView(gapW(6));
+        TextView helpBtn = button("❓ 新手教程");
+        helpBtn.setOnClickListener(v -> showApiTutorial());
+        apiHelpRow.addView(helpBtn);
+        apiCard.addView(apiHelpRow);
+        apiCard.addView(gap(8));
+        apiBaseField = apiInput("接口地址：填 https://api.xxx.com/v1 即可（忘了 /v1 保存时会自动补）",
                 PetService.instance != null ? PetService.instance.apiBase : "");
         apiCard.addView(apiBaseField);
         apiCard.addView(gap(6));
@@ -436,7 +450,7 @@ public class SettingsActivity extends Activity {
         modelRow.addView(fetchBtn);
         apiCard.addView(modelRow);
         apiCard.addView(gap(8));
-        TextView saveApiBtn = button("💾 保存接口设置");
+        TextView saveApiBtn = button("💾 保存并测试");
         saveApiBtn.setOnClickListener(v -> saveApi());
         apiCard.addView(saveApiBtn);
         root.addView(apiCard);
@@ -761,21 +775,90 @@ public class SettingsActivity extends Activity {
         setContentView(page);
     }
 
-    /** 保存接口设置：Key 留空＝沿用已保存的（避免把空串/打码串写进存档） */
+    /** 保存接口设置（保存即测试）：Key 留空＝沿用已保存的（避免把空串/打码串写进存档）。
+     *  保存前地址自动补 /v1 版本段（没填且需要时）；保存后自动测试连通性。 */
     private void saveApi() {
-        if (PetService.instance == null) return;
-        String key = apiKeyField.getText().toString().trim();
-        PetService.instance.setApi(
-                apiBaseField.getText().toString().trim(),
-                key.isEmpty() ? PetService.instance.apiKey : key,
-                apiModelField.getText().toString().trim());
-        Toast.makeText(this, "已保存，下一条消息生效", Toast.LENGTH_SHORT).show();
+        saveApiQuiet();
+        // 保存即测试：GET /models 一次请求同时验证「地址对不对 + Key 能不能用」，并返回可用模型列表
+        testApiConnection();
     }
 
-    /** 拉取模型列表：先把输入框里的地址/Key/模型落盘，再 GET /models，弹窗筛选选择 */
+    /** 只落盘不测试（拉取模型按钮走这里：它自己马上就会发请求，再测一次就重复了） */
+    private void saveApiQuiet() {
+        if (PetService.instance == null) return;
+        // 地址规范化：没有 /v1（或 /v2 /v3…）版本段时自动补 /v1（详见 PetService.normalizeBase）
+        String base = apiBaseField.getText().toString().trim();
+        String fixed = PetService.normalizeBase(base);
+        if (!fixed.equals(base)) {
+            apiBaseField.setText(fixed);
+            apiBaseField.setSelection(fixed.length());
+            Toast.makeText(this, "已自动补全为 " + fixed + "（服务商路径特殊？末尾加 # 可强制原样）", Toast.LENGTH_LONG).show();
+            base = fixed;
+        }
+        String key = apiKeyField.getText().toString().trim();
+        PetService.instance.setApi(base,
+                key.isEmpty() ? PetService.instance.apiKey : key,
+                apiModelField.getText().toString().trim());
+    }
+
+    /** 保存后自动测试连接：成功顺带检查模型名是否在服务商列表里（不在就提醒重新拉取选择） */
+    private void testApiConnection() {
+        final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
+        pd.setMessage("正在测试连接…");
+        pd.setCancelable(false);
+        pd.show();
+        final String model = apiModelField.getText().toString().trim();
+        PetService.instance.fetchModels((models, error) -> {
+            // 网络请求最长几十秒，期间用户可能已关掉设置页（见 fetchModelsDialog 的同款守卫）
+            if (isFinishing() || isDestroyed()) return;
+            dismissQuietly(pd);
+            if (error != null || models == null || models.isEmpty()) {
+                Toast.makeText(this, "已保存，但连接测试失败：" + (error == null ? "列表为空" : error)
+                        + "\n请对照新手教程检查地址和 Key", Toast.LENGTH_LONG).show();
+                return;
+            }
+            String msg = "已保存，连接正常（发现 " + models.size() + " 个模型）";
+            if (!model.isEmpty() && !models.contains(model)) {
+                msg += "\n注意：模型「" + model + "」不在列表里，建议点 📡拉取 重新选择";
+            }
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+        });
+    }
+
+    /** API 配置新手教程弹窗（长文本套 ScrollView，白底弹窗见 AppDialog） */
+    private void showApiTutorial() {
+        ScrollView sv = new ScrollView(this);
+        TextView tv = new TextView(this);
+        tv.setTextSize(13);
+        tv.setTextColor(Color.parseColor("#111111"));
+        tv.setPadding(dp(18), dp(4), dp(18), dp(4));
+        tv.setText(Ico.s(this, "三步配好 AI：\n\n"
+                + "① 接口地址 —— 填服务商给你的地址，一般长这样：\n"
+                + "    https://api.xxx.com/v1\n"
+                + "  · 填到 /v1 就行，后面的 /chat/completions 会自动补全\n"
+                + "  · 忘了填 /v1？保存时会自动帮你补上\n"
+                + "  · 服务商路径特殊、不想被自动补全：地址末尾加 #\n\n"
+                + "② API Key —— 在服务商网站注册 → 创建密钥（多为 sk- 开头）→ 复制粘贴到这里。\n"
+                + "  留空＝沿用已保存的 Key。\n\n"
+                + "③ 模型名 —— 点「📡 拉取」列出你这个 Key 能用的全部模型，搜一下点一个，比手打靠谱。\n\n"
+                + "填完点「💾 保存并测试」，App 会自动测连接：\n"
+                + "  · 连接正常（发现 N 个模型）＝配置成功\n"
+                + "  · 401 ＝ Key 不对或过期\n"
+                + "  · 404 ＝ 地址不对（多半是 /v1 的问题）\n"
+                + "  · 超时 ＝ 网络不通（手机要能访问服务商）\n\n"
+                + "模型名不在列表里也会提醒你重新拉取选择。"));
+        sv.addView(tv);
+        new AlertDialog.Builder(this, R.style.AppDialog)
+                .setTitle(Ico.s(this, "🔌 API 配置教程"))
+                .setView(sv)
+                .setPositiveButton("懂了", null)
+                .show();
+    }
+
+    /** 拉取模型列表：先把输入框里的地址/Key/模型落盘（不测试），再 GET /models，弹窗筛选选择 */
     private void fetchModelsDialog() {
         if (PetService.instance == null) return;
-        saveApi();
+        saveApiQuiet();
         final android.app.ProgressDialog pd = new android.app.ProgressDialog(this);
         pd.setMessage("正在拉取模型列表…");
         pd.setCancelable(false);

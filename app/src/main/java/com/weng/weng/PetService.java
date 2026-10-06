@@ -2192,6 +2192,22 @@ public class PetService extends Service implements Flyer.Host {
         return u + "/chat/completions";
     }
 
+    /** 地址规范化（补版本段）：没有 /v1（或 /v2 /v3…）版本段、也不是完整端点时，自动补 /v1 ——
+     *  绝大多数 OpenAI 兼容服务商的版本根都是 /v1（硅基流动、各家聚合网关、本地推理服务均是）。
+     *  只在设置页保存时调用（用户能看到补全结果并收到提示），存档里存的就是补全后的地址，
+     *  运行时的 normalizeEndpoint / modelsEndpoint 一概不动，不影响 Memory 副 API 等既有链路。
+     *  服务商路径特殊、不想被自动补全：地址末尾加 # 强制原样（与 normalizeEndpoint 的逃生门一致）。 */
+    static String normalizeBase(String base) {
+        String u = base == null ? "" : base.trim();
+        if (u.length() == 0 || u.endsWith("#")) return u;
+        while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
+        // 已是完整聊天端点或模型端点：不动（后面的 normalizeEndpoint 会补 /chat/completions）
+        if (u.endsWith("/chat/completions") || u.endsWith("/models")) return u;
+        // 结尾已有版本段（/v1 /v2 /v3…）：不动
+        if (u.matches(".*/v[0-9]+$")) return u;
+        return u + "/v1";
+    }
+
     /** 接口地址智能补全：
      *  填根地址 https://api.x.com            -> https://api.x.com/chat/completions
      *  填版本根 https://api.x.com/v1 或 /v3   -> .../v1/chat/completions
