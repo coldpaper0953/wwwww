@@ -23,6 +23,9 @@ public class SettingsActivity extends Activity {
     private ScrollView scroller;
     private android.app.AlertDialog pickDlg;
     private EditText apiBaseField, apiKeyField, apiModelField;
+    /** API 预设：当前预设名显示 + 切换预设弹窗引用 */
+    private TextView presetLabel;
+    private android.app.AlertDialog presetDlg;
     private TextView emoLine, feedLine;
     private TextView prankScore, prankBtn;
     private EditText prankCount;
@@ -429,6 +432,24 @@ public class SettingsActivity extends Activity {
         helpBtn.setOnClickListener(v -> showApiTutorial());
         apiHelpRow.addView(helpBtn);
         apiCard.addView(apiHelpRow);
+        apiCard.addView(gap(8));
+        // 预设行：显示当前预设 + 存为预设 + 切换预设（多个 API 配置一键切换）
+        LinearLayout presetRow = new LinearLayout(this);
+        presetRow.setOrientation(LinearLayout.HORIZONTAL);
+        presetRow.setGravity(Gravity.CENTER_VERTICAL);
+        presetLabel = small("#666666", Gravity.LEFT);
+        presetLabel.setText("预设：" + currentPresetName());
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        presetRow.addView(presetLabel, plp);
+        presetRow.addView(gapW(6));
+        TextView savePresetBtn = button("📌 存为预设");
+        savePresetBtn.setOnClickListener(v -> saveAsPreset());
+        presetRow.addView(savePresetBtn);
+        presetRow.addView(gapW(6));
+        TextView switchPresetBtn = button("🔁 切换");
+        switchPresetBtn.setOnClickListener(v -> switchPreset());
+        presetRow.addView(switchPresetBtn);
+        apiCard.addView(presetRow);
         apiCard.addView(gap(8));
         apiBaseField = apiInput("接口地址：填 https://api.xxx.com/v1 即可（忘了 /v1 保存时会自动补）",
                 PetService.instance != null ? PetService.instance.apiBase : "");
@@ -852,6 +873,156 @@ public class SettingsActivity extends Activity {
                 .setTitle(Ico.s(this, "🔌 API 配置教程"))
                 .setView(sv)
                 .setPositiveButton("懂了", null)
+                .show();
+    }
+
+    // ================= API 预设（多个配置一键切换） =================
+
+    /** 当前生效的 base/key/model 是否正好等于某个预设，是则返回预设名，否则「自定义」 */
+    private String currentPresetName() {
+        if (PetService.instance == null) return "未配置";
+        String b = PetService.instance.apiBase == null ? "" : PetService.instance.apiBase.trim();
+        String k = PetService.instance.apiKey == null ? "" : PetService.instance.apiKey.trim();
+        String m = PetService.instance.apiModel == null ? "" : PetService.instance.apiModel.trim();
+        java.util.List<org.json.JSONObject> ps = DataStore.arr("apiPresets");
+        for (org.json.JSONObject p : ps) {
+            if (b.equals(p.optString("base", "").trim())
+                    && k.equals(p.optString("key", "").trim())
+                    && m.equals(p.optString("model", "").trim())) {
+                return p.optString("name", "");
+            }
+        }
+        return "自定义";
+    }
+
+    private void updatePresetLabel() {
+        if (presetLabel != null) presetLabel.setText("预设：" + currentPresetName());
+    }
+
+    /** 把当前输入框里的地址/Key/模型存成一个命名预设（同名覆盖）。先落盘规范化，再取实际生效值存。 */
+    private void saveAsPreset() {
+        if (PetService.instance == null) return;
+        saveApiQuiet();
+        final String base = PetService.instance.apiBase == null ? "" : PetService.instance.apiBase.trim();
+        final String key = PetService.instance.apiKey == null ? "" : PetService.instance.apiKey.trim();
+        final String model = PetService.instance.apiModel == null ? "" : PetService.instance.apiModel.trim();
+        if (base.isEmpty() || key.isEmpty()) {
+            Toast.makeText(this, "请先填好接口地址和 API Key", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final EditText nameIn = new EditText(this);
+        nameIn.setHint("预设名（如：硅基流动、本地 Ollama）");
+        nameIn.setTextSize(13);
+        nameIn.setTextColor(Color.parseColor("#111111"));
+        nameIn.setHintTextColor(Color.parseColor("#999999"));
+        nameIn.setPadding(dp(10), dp(8), dp(10), dp(8));
+        nameIn.setMinHeight(dp(36));
+        nameIn.setMinimumHeight(dp(36));
+        nameIn.setBackground(box());
+        new AlertDialog.Builder(this, R.style.AppDialog)
+                .setTitle(Ico.s(this, "📌 存为预设"))
+                .setView(nameIn)
+                .setPositiveButton("保存", (d, w) -> {
+                    String name = nameIn.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        Toast.makeText(this, "预设名不能为空", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    java.util.List<org.json.JSONObject> ps = DataStore.arr("apiPresets");
+                    org.json.JSONObject target = null;
+                    for (org.json.JSONObject p : ps) {
+                        if (name.equals(p.optString("name", ""))) { target = p; break; }
+                    }
+                    if (target == null) { target = new org.json.JSONObject(); ps.add(target); }
+                    try {
+                        target.put("name", name);
+                        target.put("base", base);
+                        target.put("key", key);
+                        target.put("model", model);
+                    } catch (Exception ignored) {
+                    }
+                    DataStore.saveArr("apiPresets", ps);
+                    updatePresetLabel();
+                    Toast.makeText(this, "已存预设「" + name + "」", Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    /** 弹窗列出所有预设，点「用」一键切换，点「删」移除 */
+    private void switchPreset() {
+        java.util.List<org.json.JSONObject> ps = DataStore.arr("apiPresets");
+        if (ps.isEmpty()) {
+            Toast.makeText(this, "还没有预设。先填好配置，点「📌 存为预设」保存一个", Toast.LENGTH_LONG).show();
+            return;
+        }
+        ScrollView sv = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        list.setPadding(0, dp(4), 0, dp(4));
+        for (org.json.JSONObject p : ps) {
+            final String name = p.optString("name", "");
+            final String base = p.optString("base", "");
+            final String key = p.optString("key", "");
+            final String model = p.optString("model", "");
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(4), 0, dp(4));
+            TextView nameTv = new TextView(this);
+            nameTv.setText(name + "  ·  " + model);
+            nameTv.setTextSize(13);
+            nameTv.setTextColor(Color.parseColor("#111111"));
+            LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+            row.addView(nameTv, nlp);
+            row.addView(gapW(6));
+            TextView useBtn = button("用");
+            useBtn.setOnClickListener(v -> {
+                applyPreset(name, base, key, model);
+                if (presetDlg != null) dismissQuietly(presetDlg);
+            });
+            row.addView(useBtn);
+            row.addView(gapW(6));
+            TextView delBtn = button("删");
+            delBtn.setOnClickListener(v -> confirmDeletePreset(name));
+            row.addView(delBtn);
+            list.addView(row);
+        }
+        sv.addView(list);
+        presetDlg = new AlertDialog.Builder(this, R.style.AppDialog)
+                .setTitle(Ico.s(this, "🔁 切换预设"))
+                .setView(sv)
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    /** 应用某个预设：写入存档（setApi 会落盘）+ 回填输入框 + 更新标签。Key 框保持留空（沿用已保存的，不把明文摆出来）。 */
+    private void applyPreset(String name, String base, String key, String model) {
+        if (PetService.instance == null) return;
+        PetService.instance.setApi(base, key, model);
+        apiBaseField.setText(base);
+        apiKeyField.setText("");
+        apiModelField.setText(model);
+        updatePresetLabel();
+        Toast.makeText(this, "已切换到「" + name + "」", Toast.LENGTH_SHORT).show();
+    }
+
+    private void confirmDeletePreset(String name) {
+        new AlertDialog.Builder(this, R.style.AppDialog)
+                .setTitle(Ico.s(this, "删除预设"))
+                .setMessage("确定删除预设「" + name + "」？")
+                .setPositiveButton("删除", (d, w) -> {
+                    java.util.List<org.json.JSONObject> ps = DataStore.arr("apiPresets");
+                    for (int i = 0; i < ps.size(); i++) {
+                        if (name.equals(ps.get(i).optString("name", ""))) { ps.remove(i); break; }
+                    }
+                    DataStore.saveArr("apiPresets", ps);
+                    updatePresetLabel();
+                    if (presetDlg != null) dismissQuietly(presetDlg);
+                    Toast.makeText(this, "已删除「" + name + "」", Toast.LENGTH_SHORT).show();
+                    switchPreset();   // 重新打开列表，反映删除结果
+                })
+                .setNegativeButton("取消", null)
                 .show();
     }
 
