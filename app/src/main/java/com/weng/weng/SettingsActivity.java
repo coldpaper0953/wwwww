@@ -62,6 +62,9 @@ public class SettingsActivity extends Activity {
     private static final int REQ_SKIN = 0x5c01;
     /** 自定义人设：状态文本（仅桌宠2.0 显示） */
     private TextView personaRow;
+    /** 顶部 Tab 切换：5 个分组标签 + 对应内容面板 */
+    private TextView[] tabBtns = new TextView[5];
+    private LinearLayout[] tabPanes = new LinearLayout[5];
     /** 填人设输入框时用的示例 */
     private static final String SAMPLE_PERSONA =
             "你叫小黑，是一只住在这台手机里的黑猫。性格高冷、话少，其实很在意主人，但嘴上不肯承认。"
@@ -99,9 +102,42 @@ public class SettingsActivity extends Activity {
         root.addView(verLabel);
         root.addView(gap(10));
 
+        // ---- 顶部 Tab 栏：5 个分组，点一下切换下方内容 ----
+        LinearLayout tabBar = new LinearLayout(this);
+        tabBar.setOrientation(LinearLayout.HORIZONTAL);
+        GradientDrawable tabBg = new GradientDrawable();
+        tabBg.setColor(Color.WHITE);
+        tabBg.setCornerRadius(dp(3));
+        tabBg.setStroke(dp(1), Color.parseColor("#111111"));
+        tabBar.setBackground(tabBg);
+        String[] tabNames = {"交流", "宠物", "台词·AI", "玩法", "系统"};
+        for (int i = 0; i < 5; i++) {
+            TextView tb = new TextView(this);
+            tb.setText(tabNames[i]);
+            tb.setTextSize(13);
+            tb.setGravity(Gravity.CENTER);
+            tb.setPadding(0, dp(8), 0, dp(8));
+            tb.setTextColor(Color.parseColor(i == 0 ? "#111111" : "#999999"));
+            final int idx = i;
+            tb.setOnClickListener(v -> switchTab(idx));
+            tabBar.addView(tb, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            tabBtns[i] = tb;
+        }
+        root.addView(tabBar);
+        root.addView(gap(8));
+
+        // ---- 内容面板：5 组各一个，默认只显示第一组 ----
+        for (int i = 0; i < 5; i++) {
+            LinearLayout pane = new LinearLayout(this);
+            pane.setOrientation(LinearLayout.VERTICAL);
+            pane.setVisibility(i == 0 ? View.VISIBLE : View.GONE);
+            tabPanes[i] = pane;
+            root.addView(pane);
+        }
+
         // ============ 聊天卡片 ============
-        root.addView(sectionLabel("💬 交流与日常"));
-        root.addView(cardLabel("💬 聊天"));
+        tabPanes[0].addView(sectionLabel("💬 交流与日常"));
+        tabPanes[0].addView(cardLabel("💬 聊天"));
         LinearLayout chatCard = card();
         chatLog = new TextView(this);
         chatLog.setTextSize(13);
@@ -139,18 +175,18 @@ public class SettingsActivity extends Activity {
         });
         row.addView(send);
         chatCard.addView(row);
-        root.addView(chatCard);
-        root.addView(gap(8));
+        tabPanes[0].addView(chatCard);
+        tabPanes[0].addView(gap(8));
 
         // 手账入口
         TextView plannerBtn = button("📝 我的手账（待办/习惯/喝水/专注/随手记）");
         plannerBtn.setOnClickListener(v -> startActivity(new Intent(this, PlannerActivity.class)));
-        root.addView(plannerBtn);
-        root.addView(gap(10));
+        tabPanes[0].addView(plannerBtn);
+        tabPanes[0].addView(gap(10));
 
         // ============ 宠物设置卡片 ============
-        root.addView(sectionLabel("🐝 宠物与形象"));
-        root.addView(cardLabel("🐝 宠物设置"));
+        tabPanes[1].addView(sectionLabel("🐝 宠物与形象"));
+        tabPanes[1].addView(cardLabel("🐝 宠物设置"));
         LinearLayout petCard = card();
 
         petCard.addView(rowLabel("蚊子大小（捏合也可调）"));
@@ -321,12 +357,12 @@ public class SettingsActivity extends Activity {
             }
         });
         petCard.addView(persona);
-        root.addView(petCard);
-        root.addView(gap(10));
+        tabPanes[1].addView(petCard);
+        tabPanes[1].addView(gap(10));
 
         // ============ 自定义形象（仅桌宠2.0 出现） ============
         if (Edition.CUSTOM_SKIN) {
-            root.addView(cardLabel("🎨 自定义形象"));
+            tabPanes[1].addView(cardLabel("🎨 自定义形象"));
             LinearLayout skinCard = card();
             skinCard.addView(rowLabel("从相册挑图替换宠物形象：一次可选多张（按顺序当动画帧），只选一张就是静态图。"));
             skinRows = new TextView[Skin.KEYS.length];
@@ -367,13 +403,13 @@ public class SettingsActivity extends Activity {
                 Toast.makeText(this, "已恢复内置形象", Toast.LENGTH_SHORT).show();
             });
             skinCard.addView(resetAll);
-            root.addView(skinCard);
-            root.addView(gap(10));
+            tabPanes[1].addView(skinCard);
+            tabPanes[1].addView(gap(10));
         }
 
         // ============ 自定义人设（仅桌宠2.0 出现） ============
         if (Edition.CUSTOM_PERSONA) {
-            root.addView(cardLabel("🎭 自定义人设"));
+            tabPanes[1].addView(cardLabel("🎭 自定义人设"));
             LinearLayout pCard = card();
             pCard.addView(rowLabel("写它是谁、什么性格、怎么说话。留空就回到默认的宠物口吻。"));
             personaRow = small("#888888", Gravity.LEFT);
@@ -393,13 +429,13 @@ public class SettingsActivity extends Activity {
             });
             pRow.addView(clearP);
             pCard.addView(pRow);
-            root.addView(pCard);
-            root.addView(gap(10));
+            tabPanes[1].addView(pCard);
+            tabPanes[1].addView(gap(10));
         }
 
         // ============ 语录卡片（旧5组入口保留） → 全量台词工坊 ============
-        root.addView(sectionLabel("🗣 台词与 AI"));
-        root.addView(cardLabel("🗣 台词与记忆"));
+        tabPanes[2].addView(sectionLabel("🗣 台词与 AI"));
+        tabPanes[2].addView(cardLabel("🗣 台词与记忆"));
         LinearLayout qCard = card();
         // 两个入口各占一行：台词工坊文案较长，和记忆本并排会在窄屏被挤到卡边
         TextView quotesAll = button("🗣 台词工坊（全部台词含教程）");
@@ -414,11 +450,11 @@ public class SettingsActivity extends Activity {
         qHint.setText("台词工坊里可改：戳/扔/复活/时段问候/主动搭话题/小剧场/伪造报错/App吐槽/新手教程等全部文案；记忆本里可看 AI 的记忆、设副 API 和你的身份。");
         qHint.setPadding(dp(2), 0, 0, 0);
         qCard.addView(qHint);
-        root.addView(qCard);
-        root.addView(gap(10));
+        tabPanes[2].addView(qCard);
+        tabPanes[2].addView(gap(10));
 
         // ============ API 卡片 ============
-        root.addView(cardLabel("🔌 AI 接口（可换服务商）"));
+        tabPanes[2].addView(cardLabel("🔌 AI 接口（可换服务商）"));
         LinearLayout apiCard = card();
         // 新手指导：一行提示 + 教程按钮
         LinearLayout apiHelpRow = new LinearLayout(this);
@@ -474,12 +510,12 @@ public class SettingsActivity extends Activity {
         TextView saveApiBtn = button("💾 保存并测试");
         saveApiBtn.setOnClickListener(v -> saveApi());
         apiCard.addView(saveApiBtn);
-        root.addView(apiCard);
-        root.addView(gap(10));
+        tabPanes[2].addView(apiCard);
+        tabPanes[2].addView(gap(10));
 
         // ============ 整蛊模式卡片 ============
-        root.addView(sectionLabel("🎮 玩法与感知"));
-        root.addView(cardLabel("🦟 整蛊模式（和电脑版一样的蚊群拍打游戏）"));
+        tabPanes[3].addView(sectionLabel("🎮 玩法与感知"));
+        tabPanes[3].addView(cardLabel("🦟 整蛊模式（和电脑版一样的蚊群拍打游戏）"));
         LinearLayout prankCard = card();
         LinearLayout pRow = new LinearLayout(this);
         pRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -513,11 +549,11 @@ public class SettingsActivity extends Activity {
         prankScore = small("#777777", Gravity.LEFT);
         prankScore.setPadding(dp(4), 0, 0, dp(2));
         prankCard.addView(prankScore);
-        root.addView(prankCard);
-        root.addView(gap(10));
+        tabPanes[3].addView(prankCard);
+        tabPanes[3].addView(gap(10));
 
         // ============ 更多玩法卡片 ============
-        root.addView(cardLabel("🎮 更多玩法"));
+        tabPanes[3].addView(cardLabel("🎮 更多玩法"));
         LinearLayout exCard = card();
         LinearLayout exRow = new LinearLayout(this);
         exRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -567,11 +603,11 @@ public class SettingsActivity extends Activity {
             Toast.makeText(this, "下次启动会重新播放教程", Toast.LENGTH_SHORT).show();
         });
         exCard.addView(resetTut);
-        root.addView(exCard);
-        root.addView(gap(10));
+        tabPanes[3].addView(exCard);
+        tabPanes[3].addView(gap(10));
 
         // ============ 交互与感知卡片 ============
-        root.addView(cardLabel("🖐 交互与感知"));
+        tabPanes[3].addView(cardLabel("🖐 交互与感知"));
         LinearLayout ixCard = card();
 
         // 惯性档位
@@ -633,11 +669,11 @@ public class SettingsActivity extends Activity {
             }
         });
         ixCard.addView(jumpModeBtn);
-        root.addView(ixCard);
-        root.addView(gap(10));
+        tabPanes[3].addView(ixCard);
+        tabPanes[3].addView(gap(10));
 
         // ============ 主动搭话节奏卡片 ============
-        root.addView(cardLabel("⏰ 主动搭话节奏"));
+        tabPanes[3].addView(cardLabel("⏰ 主动搭话节奏"));
         LinearLayout chatRhythmCard = card();
 
         chatRhythmCard.addView(rowLabel("基准间隔（每隔 n 分钟主动来搭理你一次）"));
@@ -691,12 +727,12 @@ public class SettingsActivity extends Activity {
         chatCountVal = small("#777777", Gravity.LEFT);
         chatCountVal.setPadding(dp(4), dp(2), 0, dp(2));
         chatRhythmCard.addView(chatCountVal);
-        root.addView(chatRhythmCard);
-        root.addView(gap(10));
+        tabPanes[3].addView(chatRhythmCard);
+        tabPanes[3].addView(gap(10));
 
         // ============ 更新与关于卡片 ============
-        root.addView(sectionLabel("⚙️ 系统与支持"));
-        root.addView(cardLabel("⚙️ 更新与关于"));
+        tabPanes[4].addView(sectionLabel("⚙️ 系统与支持"));
+        tabPanes[4].addView(cardLabel("⚙️ 更新与关于"));
         LinearLayout aboutCard = card();
         // 检查更新单独一行：文案会变成「⬆ 有新版本 vX，点此更新」，和别的按钮并排会被挤出边框
         updBtn = button("🔄 检查更新");
@@ -731,8 +767,8 @@ public class SettingsActivity extends Activity {
         TextView about = small("#AAAAAA", Gravity.CENTER);
         about.setText(Edition.CUSTOM_SKIN ? "桌宠 2.0 · 人设与形象都可自定义" : "嗡嗡嗡手机版 · 还原版");
         aboutCard.addView(about);
-        root.addView(aboutCard);
-        root.addView(gap(10));
+        tabPanes[4].addView(aboutCard);
+        tabPanes[4].addView(gap(10));
 
         // ============ Bug 反馈 & 建议许愿（接在崩溃日志下面，折叠栏） ============
         fbFoldTitle = new TextView(this);
@@ -741,7 +777,7 @@ public class SettingsActivity extends Activity {
         fbFoldTitle.setTypeface(Typeface.DEFAULT_BOLD);
         fbFoldTitle.setTextColor(Color.parseColor("#666666"));
         fbFoldTitle.setPadding(dp(4), dp(6), 0, dp(6));
-        root.addView(fbFoldTitle);
+        tabPanes[4].addView(fbFoldTitle);
 
         LinearLayout fbCard = card();
         fbCard.addView(rowLabel("哪里不对、想要什么功能，写下来发给我。内容会自动带上版本号、机型和最近的崩溃日志。"));
@@ -785,7 +821,7 @@ public class SettingsActivity extends Activity {
 
         fbFoldBody = fbCard;
         fbFoldBody.setVisibility(View.GONE);   // 默认收起
-        root.addView(fbFoldBody);
+        tabPanes[4].addView(fbFoldBody);
         fbFoldTitle.setOnClickListener(v -> toggleFeedbackFold());
 
         ScrollView page = new ScrollView(this);
@@ -794,6 +830,19 @@ public class SettingsActivity extends Activity {
         page.setFillViewport(true);
         page.addView(root);
         setContentView(page);
+    }
+
+    /** 顶部 Tab 切换：显示第 idx 组内容，其余隐藏，并更新标签高亮 */
+    private void switchTab(int idx) {
+        for (int i = 0; i < 5; i++) {
+            if (tabPanes[i] != null) {
+                tabPanes[i].setVisibility(i == idx ? View.VISIBLE : View.GONE);
+            }
+            if (tabBtns[i] != null) {
+                tabBtns[i].setTextColor(Color.parseColor(i == idx ? "#111111" : "#999999"));
+                tabBtns[i].setTypeface(i == idx ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
+            }
+        }
     }
 
     /** 保存接口设置（保存即测试）：Key 留空＝沿用已保存的（避免把空串/打码串写进存档）。
@@ -1614,7 +1663,7 @@ public class SettingsActivity extends Activity {
         t.setTextSize(15);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextColor(Color.parseColor("#111111"));
-        t.setPadding(dp(4), dp(16), 0, dp(8));
+        t.setPadding(dp(4), dp(4), 0, dp(6));
         return t;
     }
 
