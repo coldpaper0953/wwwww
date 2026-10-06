@@ -87,6 +87,8 @@ public class SettingsActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
         root.setBackgroundColor(Color.parseColor("#FFFFFF"));
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
 
         TextView title = new TextView(this);
         title.setText(getString(R.string.app_name) + " · 设置");
@@ -106,9 +108,10 @@ public class SettingsActivity extends Activity {
         LinearLayout tabBar = new LinearLayout(this);
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         GradientDrawable tabBg = new GradientDrawable();
-        tabBg.setColor(Color.parseColor("#F7F7F7"));
+        tabBg.setColor(Color.WHITE);
         tabBg.setCornerRadius(dp(8));
         tabBar.setBackground(tabBg);
+        tabBar.setElevation(dp(2));
         String[] tabNames = {"交流", "宠物", "台词·AI", "玩法", "系统"};
         for (int i = 0; i < 5; i++) {
             TextView tb = new TextView(this);
@@ -131,6 +134,8 @@ public class SettingsActivity extends Activity {
             pane.setOrientation(LinearLayout.VERTICAL);
             pane.setVisibility(i == 0 ? View.VISIBLE : View.GONE);
             tabPanes[i] = pane;
+            pane.setClipChildren(false);
+            pane.setClipToPadding(false);
             root.addView(pane);
         }
 
@@ -827,6 +832,8 @@ public class SettingsActivity extends Activity {
         // 避免内容不足一屏时露出窗口底色（见 res/values/styles.xml 的说明）
         page.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.setFillViewport(true);
+        page.setClipChildren(false);
+        page.setClipToPadding(false);
         page.addView(root);
         setContentView(page);
     }
@@ -1670,9 +1677,10 @@ public class SettingsActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.parseColor("#F7F7F7"));
+        g.setColor(Color.WHITE);
         g.setCornerRadius(dp(8));
         c.setBackground(g);
+        c.setElevation(dp(3));
         return c;
     }
 

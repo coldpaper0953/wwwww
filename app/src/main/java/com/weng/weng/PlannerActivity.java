@@ -32,10 +32,14 @@ public class PlannerActivity extends Activity {
         // ScrollView 自己不透明化，内容不足一屏时下面会露出窗口底色（深色模式下就是黑的）
         page.setBackgroundColor(Color.parseColor("#FFFFFF"));
         page.setFillViewport(true);      // 内容短时也让内容区撑满一屏
+        page.setClipChildren(false);
+        page.setClipToPadding(false);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(16), dp(16), dp(16));
         root.setBackgroundColor(Color.parseColor("#FFFFFF"));
+        root.setClipChildren(false);
+        root.setClipToPadding(false);
         page.addView(root);
         setContentView(page);
 
@@ -362,9 +366,10 @@ public class PlannerActivity extends Activity {
         c.setOrientation(LinearLayout.VERTICAL);
         c.setPadding(dp(12), dp(10), dp(12), dp(12));
         GradientDrawable g = new GradientDrawable();
-        g.setColor(Color.parseColor("#F7F7F7"));
+        g.setColor(Color.WHITE);
         g.setCornerRadius(dp(8));
         c.setBackground(g);
+        c.setElevation(dp(3));
         return c;
     }
 
