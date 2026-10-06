@@ -184,13 +184,13 @@ public class Memory {
     // ================= 副 API（整理专用；未配置则用主 API） =================
 
     public static String subBase() { return DataStore.sp().getString("subBase", ""); }
-    public static String subKey() { return DataStore.sp().getString("subKey", ""); }
+    public static String subKey() { return Crypto.decrypt(DataStore.sp().getString("subKey", "")); }
     public static String subModel() { return DataStore.sp().getString("subModel", ""); }
 
     public static void setSub(String base, String key, String model) {
         DataStore.sp().edit()
                 .putString("subBase", base == null ? "" : base.trim())
-                .putString("subKey", key == null ? "" : key.trim())
+                .putString("subKey", Crypto.encrypt(key == null ? "" : key.trim()))
                 .putString("subModel", model == null ? "" : model.trim())
                 .apply();
     }

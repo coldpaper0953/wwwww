@@ -887,7 +887,7 @@ public class SettingsActivity extends Activity {
         java.util.List<org.json.JSONObject> ps = DataStore.arr("apiPresets");
         for (org.json.JSONObject p : ps) {
             if (b.equals(p.optString("base", "").trim())
-                    && k.equals(p.optString("key", "").trim())
+                    && k.equals(Crypto.decrypt(p.optString("key", "")).trim())
                     && m.equals(p.optString("model", "").trim())) {
                 return p.optString("name", "");
             }
@@ -937,7 +937,7 @@ public class SettingsActivity extends Activity {
                     try {
                         target.put("name", name);
                         target.put("base", base);
-                        target.put("key", key);
+                        target.put("key", Crypto.encrypt(key));
                         target.put("model", model);
                     } catch (Exception ignored) {
                     }
@@ -963,7 +963,7 @@ public class SettingsActivity extends Activity {
         for (org.json.JSONObject p : ps) {
             final String name = p.optString("name", "");
             final String base = p.optString("base", "");
-            final String key = p.optString("key", "");
+            final String key = Crypto.decrypt(p.optString("key", ""));
             final String model = p.optString("model", "");
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);

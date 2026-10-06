@@ -2178,7 +2178,7 @@ public class PetService extends Service implements Flyer.Host {
 
     private void initApi() {
         apiBase = sp.getString("apiBase", URL_API);
-        apiKey = sp.getString("apiKey", KEY_API);
+        apiKey = Crypto.decrypt(sp.getString("apiKey", KEY_API));
         apiModel = sp.getString("apiModel", MODEL);
     }
 
@@ -2226,7 +2226,7 @@ public class PetService extends Service implements Flyer.Host {
         if (base != null && base.trim().length() > 0) apiBase = base.trim();
         if (key != null && key.trim().length() > 0) apiKey = key.trim();
         if (model != null && model.trim().length() > 0) apiModel = model.trim();
-        sp.edit().putString("apiBase", apiBase).putString("apiKey", apiKey).putString("apiModel", apiModel).apply();
+        sp.edit().putString("apiBase", apiBase).putString("apiKey", Crypto.encrypt(apiKey)).putString("apiModel", apiModel).apply();
     }
 
     /** 从聊天端点推出模型列表端点：.../v1/chat/completions -> .../v1/models；根地址 -> .../models */
